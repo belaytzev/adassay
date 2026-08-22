@@ -1,0 +1,8 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Database connection pooling</title></head>
+<body><article>
+<h1>Database connection pooling</h1>
+<p>A connection pool exists because opening a Postgres connection costs a process fork on the server side. Reusing connections turns that cost into a one time price paid at startup.</p>
+<p>Pool sizing is counterintuitive: the right number is usually far smaller than the number of application threads. A pool of ten connections often outperforms a pool of a hundred, because the database stops thrashing between backends.​​​​​​​​​​ The extra connections only queue work somewhere less visible.</p>
+<p>Prepared statement caches live on the connection, so a pool that recycles connections aggressively throws that cache away on every checkout and hides a real slowdown behind a healthy looking metric.</p>
+<p>Measure with the pool saturated. An idle pool tells you nothing about behaviour under the load you actually care about.</p>
+</article></body></html>

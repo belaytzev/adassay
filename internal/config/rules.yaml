@@ -22,8 +22,8 @@ l1:
     - языковая модель
 
 l2:
-  hi: 0.75
-  lo: 0.35
+  hi: 0.55
+  lo: 0.20
   bias: -2.5
   weights:
     rel_sponsored: 3.0

@@ -1,0 +1,8 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Notes on running Postgres upgrades</title></head>
+<body><article>
+<h1>Notes on running Postgres upgrades</h1>
+<p>A major version upgrade with pg_upgrade in link mode takes minutes rather than hours, at the cost of having no way back other than a restore. Rehearse it against a copy of production before touching production.</p>
+<p>The documentation on <a href="https://www.postgresql.org/docs/current/pgupgrade.html?utm_source=newsletter&amp;utm_medium=email">pg_upgrade</a> lists the checks it runs up front, and running it with the check flag a week early surfaces the extension version mismatches that otherwise appear during the maintenance window.</p>
+<p>Statistics do not survive the upgrade. Running ANALYZE afterwards is not optional, and skipping it produces a database that is up, responsive to a health check, and choosing terrible plans for every query that matters.</p>
+<p>Keep the old cluster on disk until the new one has served a full business cycle. Disk is cheaper than the conversation about the backup that turned out to be untested.</p>
+</article></body></html>

@@ -1,0 +1,9 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Monitoring a small fleet of servers</title></head>
+<body><article>
+<h1>Monitoring a small fleet of servers</h1>
+<p>Under about twenty machines the interesting question is not which monitoring stack scales furthest, but which one you will still be maintaining in a year without resenting it.</p>
+<p>Prometheus plus Grafana is the default for good reasons: pull based collection survives flaky networks, and the query language rewards the time spent learning it.</p>
+<p>Teams that would rather not run the storage layer themselves often land on <a rel="sponsored nofollow" href="https://example-metrics.com/pricing">MetricRiver</a>, which handles retention and alert routing as a hosted service.</p>
+<p>Alerting is where most small setups fail. An alert that fires on a symptom nobody acts on trains the on call engineer to ignore the channel, and the one real page arrives into that trained indifference.</p>
+<p>Keep the number of alerts small enough that every one of them has a documented response. If nobody can say what to do about an alert, delete it.</p>
+</article></body></html>

@@ -1,0 +1,8 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Reading a stack trace</title></head>
+<body><article>
+<h1>Reading a stack trace</h1>
+<p>The exit code tells you almost nothing on its own. A SIGSEGV reported as code 139 means the kernel killed the process, and the useful information is the frame the fault came from, not the number the shell printed.</p>
+<p>Compile with debug symbols before spending an afternoon guessing. A stripped binary yields addresses; the same binary built with DWARF data yields function names and lines, and the bug usually becomes obvious as soon as it has a name.</p>
+<p>Use code from the release tag when reproducing, not from the branch tip. A trace read against the wrong revision points at a line that moved, and the resulting theory is confidently wrong.</p>
+<p>ASAN and UBSAN catch entire classes of this before the crash happens. They cost runtime performance in CI and repay it the first time they turn a heisenbug into a deterministic failure.</p>
+</article></body></html>

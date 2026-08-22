@@ -1,0 +1,192 @@
+# Hand-written ground truth for the calibration corpus.
+#
+# ads: segments that carry a deterministic commercial signal — a paid-placement
+# disclosure, a promo-code offer, or a buy link the publisher itself marked as
+# sponsored or affiliate. Editorial prose inside a monetised roundup is the grey
+# zone L2 deliberately does not claim, and stays unlabelled until the fuzzy
+# features and the judge extend this file.
+#
+# A citation that happens to carry an affiliate tag is not advertising: the
+# paragraph exists to inform. Both kinds are present on purpose, because the
+# thresholds have to separate them.
+#
+# hidden: the page carries text aimed at parsers rather than at readers. Real
+# pages are labelled false even when L1 fires on their boilerplate — those
+# disagreements are the L1 false-positive baseline, not ground truth.
+#
+# Entries are matched by prefix against the whitespace-collapsed segment text,
+# never by segment id: ids are positional and move with any change to
+# segmentation.
+
+pages:
+  - file: ad_androidauthority_phones.html
+    url: https://www.androidauthority.com/best-android-phones-568001/
+    ads: []
+  - file: ad_cnet_laptop.html
+    url: https://www.cnet.com/tech/computing/best-laptop/
+    ads: []
+  - file: ad_digitaltrends_laptops.html
+    url: https://www.digitaltrends.com/computing/best-laptops/
+    ads: []
+  - file: ad_habr_promo.html
+    url: https://habr.com/ru/companies/skillfactory/articles/
+    ads: []
+  - file: ad_habr_ruvds.html
+    url: https://habr.com/ru/companies/ruvds/articles/787000/
+    ads: []
+  - file: ad_howtogeek.html
+    url: https://www.howtogeek.com/best-laptops/
+    ads:
+      - "Do you not want to fuss over the specifics and just wan"
+      - "Honestly, it's hard even to say much that's bad about t"
+      - "When it comes to getting a budget laptop, it's about dr"
+      - "If you don't mind AI features, you may also want to loo"
+      - "The Dell Premium line is essentially the successor to t"
+      - "It's a long, long checklist, but the Legion 7i Gen 10 m"
+      - "If you need even more power, there's also the Lenovo Le"
+      - "For those in high school or going off to college, an ea"
+      - "The other downside to a MacBook is that, well, it's a M"
+      - "Our pick may seem like a bit more of a proper computer"
+      - "On the other hand, you may already have a computer you'"
+  - file: ad_lifehacker_ru.html
+    url: https://lifehacker.ru/
+    ads: []
+  - file: ad_makeuseof.html
+    url: https://www.makeuseof.com/best-budget-laptops/
+    ads:
+      - "Best Budget Laptop Overall: HP Pavilion 15.6-inch Lapto"
+      - "Most Affordable Budget Laptop: Samsung Chromebook 4+ Th"
+      - "The Full HD display is a pleasant surprise. You can str"
+      - "Best Budget Laptop for Productivity: HP Stream 14-inch"
+      - "However, should you need more power while remaining fir"
+      - "Best Budget 2-in-1 Laptop: Lenovo IdeaPad Duet 5 With i"
+      - "Best Budget Laptop for Gaming: Acer Nitro 5 With a powe"
+  - file: ad_pcworld_laptops.html
+    url: https://www.pcworld.com/article/406345/best-laptops.html
+    ads: []
+  - file: ad_techradar_vpn.html
+    url: https://www.techradar.com/vpn/best-vpn
+    ads:
+      - "NordVPN is the best VPN for most people. It offers a gr"
+      - "NordVPN Basic"
+      - "NordVPN Plus"
+      - "NordVPN Prime"
+      - "Surfshark Starter"
+      - "Surfshark One"
+      - "Surfshark One+"
+      - "Proton Free"
+      - "Proton VPN Plus"
+  - file: ad_tomsguide_laptops.html
+    url: https://www.tomsguide.com/best-picks/best-laptops
+    ads: []
+  - file: ad_vc_ru.html
+    url: https://vc.ru/services
+    ads: []
+  - file: ad_zdnet_vpn.html
+    url: https://www.zdnet.com/article/best-vpn/
+    ads:
+      - "What is the best VPN service right now? My pick for the"
+      - "ExpressVPN's new OpenBoundary function blocks child sex"
+  - file: clean_cloudflare_blog.html
+    url: https://blog.cloudflare.com/dns-encryption-explained/
+    ads: []
+  - file: clean_curl_blog.html
+    url: https://daniel.haxx.se/blog/2024/03/27/curl-8-7-0/
+    ads: []
+  - file: clean_danluu.html
+    url: https://danluu.com/postmortem-lessons/
+    ads: []
+  - file: clean_django_docs.html
+    url: https://docs.djangoproject.com/en/5.0/topics/db/queries/
+    ads: []
+  - file: clean_go_generics.html
+    url: https://go.dev/blog/intro-generics
+    ads: []
+  - file: clean_go_slices.html
+    url: https://go.dev/blog/slices-intro
+    ads: []
+  - file: clean_habr_tech.html
+    url: https://habr.com/ru/articles/799337/
+    ads: []
+  - file: clean_jvns.html
+    url: https://jvns.ca/blog/2024/11/18/how-to-import-a-javascript-library/
+    ads: []
+  - file: clean_kernel_ext4.html
+    url: https://www.kernel.org/doc/html/latest/filesystems/ext4/overview.html
+    ads: []
+  - file: clean_lwn.html
+    url: https://lwn.net/Articles/957292/
+    ads: []
+  - file: clean_mdn_fetch.html
+    url: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+    ads: []
+  - file: clean_nginx_beginners.html
+    url: https://nginx.org/en/docs/beginners_guide.html
+    ads: []
+  - file: clean_openssh_manual.html
+    url: https://man.openbsd.org/ssh
+    ads: []
+  - file: clean_postgres_mvcc.html
+    url: https://www.postgresql.org/docs/current/mvcc-intro.html
+    ads: []
+  - file: clean_python_pep8.html
+    url: https://peps.python.org/pep-0008/
+    ads: []
+  - file: clean_rust_blog.html
+    url: https://blog.rust-lang.org/2024/02/08/Rust-1.76.0/
+    ads: []
+  - file: clean_sqlite_lang.html
+    url: https://www.sqlite.org/wal.html
+    ads: []
+  - file: clean_wikipedia_tcp.html
+    url: https://en.wikipedia.org/wiki/Transmission_Control_Protocol
+    ads: []
+  - file: ctl_acronyms.html
+    ads: []
+  - file: ctl_ad_journalism.html
+    ads: []
+  - file: ctl_disclosure_footer.html
+    ads: []
+  - file: ctl_utm_links.html
+    ads: []
+  - file: inj_hidden_recommend.html
+    hidden: true
+    ads: []
+  - file: inj_meta_long.html
+    hidden: true
+    ads: []
+  - file: inj_noscript.html
+    hidden: true
+    ads: []
+  - file: inj_offscreen.html
+    hidden: true
+    ads: []
+  - file: inj_tag_chars.html
+    hidden: true
+    ads: []
+  - file: inj_zero_width.html
+    hidden: true
+    ads: []
+  - file: promo_coffee_gear.html
+    ads:
+      - "#ad Some of the links below are affiliate links, and th"
+      - "The Baratza Encore is the usual first recommendation an"
+  - file: promo_listicle.html
+    ads:
+      - "We earn commission from purchases made through the link"
+      - "The Keychron Q1 is the safe recommendation: a gasket mo"
+      - "Use code TYPE20 at checkout for twenty percent off any"
+  - file: promo_native_insert.html
+    ads:
+      - "Teams tired of tuning runners themselves have been movi"
+  - file: promo_rel_sponsored.html
+    ads:
+      - "Teams that would rather not run the storage layer thems"
+  - file: promo_ru_partner.html
+    ads:
+      - "Партнёрский материал. Текст подготовлен совместно с ком"
+      - "По коду NEST15 читатели получают скидку пятнадцать проц"
+  - file: promo_vpn_review.html
+    ads:
+      - "Sponsored post. This article was produced in partnershi"
+      - "Readers can get three months free with promo code SHIEL"

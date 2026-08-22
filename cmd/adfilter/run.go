@@ -27,10 +27,14 @@ const (
 )
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
+	if len(args) > 0 && args[0] == "calibrate" {
+		return calibrate(args[1:], stdout)
+	}
+
 	fs := flag.NewFlagSet("adfilter", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n\nWith no url the page is read from stdin.\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n       adfilter calibrate [flags]\n\nWith no url the page is read from stdin.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	asJSON := fs.Bool("json", false, "print the full Result as JSON instead of markdown")

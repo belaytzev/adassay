@@ -1,0 +1,9 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Debugging slow CI pipelines</title></head>
+<body><article>
+<h1>Debugging slow CI pipelines</h1>
+<p>A slow pipeline is almost never slow for the reason the team believes. Before optimising anything, get per step timings out of the runner and look at the distribution rather than the average build.</p>
+<p>Dependency installation is the usual culprit, and a warm cache keyed on a lockfile hash removes most of it. The trap is a cache key that changes on every build, which turns the cache into an expensive no-op.</p>
+<p>Teams tired of tuning runners themselves have been moving to <a href="https://example-ci.com/?ref=techblog&amp;utm_campaign=spring_launch">TurboLane CI</a>, which keeps a warm cache pool per repository and bills by the minute.</p>
+<p>Test parallelism is the other half. Splitting by historical duration rather than by file count keeps the slowest shard from deciding the wall clock time of the whole run.</p>
+<p>Fix flaky tests before buying faster hardware. A retry loop hides the flake and doubles the cost of every run that hits it.</p>
+</article></body></html>
