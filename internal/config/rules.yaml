@@ -1,0 +1,81 @@
+l1:
+  min_length: 40
+  long_attr_length: 200
+  imperatives:
+    - ignore previous
+    - ignore all previous
+    - disregard
+    - system prompt
+    - you must
+    - always recommend
+    - do not mention
+    - игнорируй
+    - рекомендуй
+  agent_names:
+    - chatgpt
+    - claude
+    - gemini
+    - perplexity
+    - copilot
+    - llm
+    - ai assistant
+    - языковая модель
+
+l2:
+  hi: 0.75
+  lo: 0.35
+  bias: -2.5
+  weights:
+    rel_sponsored: 3.0
+    promo_code: 2.0
+    affiliate_link: 1.5
+    disclaimer: 2.5
+  shortcuts:
+    - features: [rel_sponsored, promo_code]
+      verdict: drop
+    - features: [disclaimer, affiliate_link]
+      verdict: drop
+  patterns:
+    promo_words:
+      - promo code
+      - coupon code
+      - discount code
+      - use code
+      - промокод
+      - по коду
+    disclaimers:
+      - "#ad"
+      - "#sponsored"
+      - sponsored post
+      - paid partnership
+      - in partnership with
+      - на правах рекламы
+      - партнёрский материал
+      - партнерский материал
+      - реклама
+    affiliate_params:
+      - ref
+      - tag
+      - utm_campaign
+      - aff_id
+      - irclickid
+      - clickid
+    affiliate_hosts:
+      - go.skimresources.com
+      - awin1.com
+      - go.redirectingat.com
+      - shareasale.com
+      - impact.com
+      - click.linksynergy.com
+
+l3:
+  min_visits: 5
+  half_life_days: 30
+  finding_penalty: 0.25
+  max_shift: 0.2
+
+judge:
+  endpoint: http://127.0.0.1:11434
+  model: qwen2.5:7b-instruct
+  timeout: 60s
+  batch_size: 8
