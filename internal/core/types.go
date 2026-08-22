@@ -84,6 +84,7 @@ type Segment struct {
 	Score   float64  `json:"score"`
 	Verdict Verdict  `json:"verdict"`
 	Reasons []string `json:"reasons,omitempty"`
+	Links   []Link   `json:"links,omitempty"`
 }
 
 type Finding struct {
@@ -97,4 +98,12 @@ type Result struct {
 	Hidden      []Finding `json:"hidden,omitempty"`
 	SourceScore float64   `json:"source_score"`
 	Domain      string    `json:"domain"`
+}
+
+// Link keeps the markup a segment was built from: rel and href are what the L2
+// rules read, and they are gone once the segment is plain text.
+type Link struct {
+	Href string `json:"href"`
+	Rel  string `json:"rel,omitempty"`
+	Text string `json:"text,omitempty"`
 }
