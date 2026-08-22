@@ -276,3 +276,69 @@ func contains(list []string, want string) bool {
 	}
 	return false
 }
+
+type fakeShared struct {
+	entries map[string]core.BucketEntry
+	asked   [][]byte
+}
+
+func (s *fakeShared) put(text string, entry core.BucketEntry) {
+	if s.entries == nil {
+		s.entries = map[string]core.BucketEntry{}
+	}
+	key := hex.EncodeToString(store.Hash(text))
+	entry.Hash = key
+	s.entries[key] = entry
+}
+
+func (s *fakeShared) Lookup(hash []byte) (core.BucketEntry, bool) {
+	s.asked = append(s.asked, hash)
+	entry, ok := s.entries[hex.EncodeToString(hash)]
+	return entry, ok
+}
+
+func TestSharedVerdictBeatsRulesAndIsCached(t *testing.T) {
+	cache := newCache()
+	shared := &fakeShared{}
+	shared.put(adText, core.BucketEntry{Verdict: core.Keep, Reasons: []string{"voted not an ad"}, Source: core.SourceHuman})
+	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Shared: shared, Log: quiet()}
+
+	res := run(t, p, core.Segment{ID: "s1", Text: adText, Links: adLinks})
+
+	if got := res.Segments[0].Verdict; got != core.Keep {
+		t.Errorf("verdict = %v, want keep — the rules ran over the shared database", got)
+	}
+	if got := res.Segments[0].Reasons; len(got) != 1 || got[0] != "voted not an ad" {
+		t.Errorf("reasons = %v, want the shared ones", got)
+	}
+	if len(cache.upserts) != 1 || cache.upserts[0].Source != core.SourceShared {
+		t.Fatalf("shared verdict not cached locally: %+v", cache.upserts)
+	}
+}
+
+func TestSharedNotAskedAboveRules(t *testing.T) {
+	cache := newCache()
+	cache.put(adText, store.Record{Verdict: core.Keep, Source: core.SourceHuman})
+	shared := &fakeShared{}
+	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Shared: shared, Log: quiet()}
+
+	run(t, p, core.Segment{ID: "s1", Text: adText, Links: adLinks})
+
+	if len(shared.asked) != 0 {
+		t.Errorf("asked the shared database about a segment already decided locally: %d lookup(s)", len(shared.asked))
+	}
+}
+
+func TestSharedMissFallsBackToRules(t *testing.T) {
+	shared := &fakeShared{}
+	p := &Pipeline{Cfg: testConfig(t), Cache: newCache(), Shared: shared, Log: quiet()}
+
+	res := run(t, p, core.Segment{ID: "s1", Text: adText, Links: adLinks})
+
+	if len(shared.asked) != 1 {
+		t.Errorf("lookups = %d, want 1", len(shared.asked))
+	}
+	if got := res.Segments[0].Verdict; got != core.Drop {
+		t.Errorf("verdict = %v, want drop from the rules", got)
+	}
+}

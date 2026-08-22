@@ -30,11 +30,18 @@ type Judge interface {
 	Decide(topic string, segs []core.Segment) map[string]core.Verdict
 }
 
+// Shared is the read side of the shared verdict database. A nil field is a run
+// that asks nobody anything.
+type Shared interface {
+	Lookup(hash []byte) (core.BucketEntry, bool)
+}
+
 type Pipeline struct {
-	Cfg   *config.Config
-	Cache Cache
-	Judge Judge
-	Log   *slog.Logger
+	Cfg    *config.Config
+	Cache  Cache
+	Shared Shared
+	Judge  Judge
+	Log    *slog.Logger
 }
 
 // priority resolves two verdicts for the same segment: a human override beats
@@ -116,6 +123,16 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 		return seg, true
 	}
 
+	// The shared database is asked only for what the local cache could not
+	// answer with authority, and its answer is cached so the next run of the
+	// same segment stays offline.
+	if entry, ok := p.lookupShared(hash); ok {
+		seg.Verdict = entry.Verdict
+		seg.Reasons = entry.Reasons
+		p.store(hash, seg, core.SourceShared)
+		return seg, true
+	}
+
 	seg = rules.Apply(seg, doc, p.Cfg.L2)
 	seg = p.shift(seg, sourceScore)
 
@@ -150,6 +167,13 @@ func (p *Pipeline) shift(seg core.Segment, sourceScore float64) core.Segment {
 		seg.Reasons = append(seg.Reasons, ReasonDomain)
 	}
 	return seg
+}
+
+func (p *Pipeline) lookupShared(hash []byte) (core.BucketEntry, bool) {
+	if p.Shared == nil {
+		return core.BucketEntry{}, false
+	}
+	return p.Shared.Lookup(hash)
 }
 
 func (p *Pipeline) lookup(hash []byte) (store.Record, bool) {

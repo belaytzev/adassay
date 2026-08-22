@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/belaytzev/adfilter/internal/core"
+	"github.com/belaytzev/adfilter/internal/share"
 	"github.com/belaytzev/adfilter/internal/store"
 )
 
@@ -163,5 +164,35 @@ func TestPrefixLengthMatchesClient(t *testing.T) {
 	}
 	if w := get(t, st, bucketPath(prefix, core.NormVersion)); w.Code != http.StatusOK {
 		t.Fatalf("server rejected a client-built prefix %q: %d %s", prefix, w.Code, w.Body)
+	}
+}
+
+// The client is checked against the real handler, not against a hand-written
+// fixture: a format the two sides only agree on in tests is not a contract.
+func TestSharedClientAgainstLiveServer(t *testing.T) {
+	const text = "Промокод ADFILTER даёт 20% скидки"
+	st := newTestStore(t)
+	if err := st.put(core.BucketEntry{
+		Hash:    store.HexHash(text),
+		Verdict: core.Drop,
+		Reasons: []string{"promo_code"},
+		Source:  core.SourceRules,
+	}, core.NormVersion); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+
+	srv := httptest.NewServer(newMux(st))
+	defer srv.Close()
+
+	c := &share.Client{BaseURL: srv.URL, HTTP: srv.Client()}
+	entry, ok := c.Lookup(store.Hash(text))
+	if !ok {
+		t.Fatal("client found nothing the server stored")
+	}
+	if entry.Verdict != core.Drop || entry.Hash != store.HexHash(text) {
+		t.Errorf("got %+v, want a drop for the stored hash", entry)
+	}
+	if _, ok := c.Lookup(store.Hash("совершенно другой сегмент")); ok {
+		t.Error("client took a decoy for a verdict")
 	}
 }
