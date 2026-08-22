@@ -1,0 +1,18 @@
+# The public entry point is a Cloudflare Tunnel, not this Ingress: it stays
+# cluster-internal so the tunnel pod has a stable name to point at.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: adfilter
+spec:
+  rules:
+    - host: adfilter.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: adfilter
+                port:
+                  name: http
