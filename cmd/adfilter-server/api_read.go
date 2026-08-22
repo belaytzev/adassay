@@ -13,21 +13,22 @@ import (
 
 const hexDigits = "0123456789abcdef"
 
-func newMux(st *Store, g *guard) *http.ServeMux {
+func newMux(st *Store, g *guard, m *metrics) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/segments/{prefix}", func(w http.ResponseWriter, r *http.Request) {
-		handleBucket(w, r, st)
-	})
-	mux.HandleFunc("POST /v1/segments", g.limit(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/segments/{prefix}", m.count(&m.bucketReqs, func(w http.ResponseWriter, r *http.Request) {
+		handleBucket(w, r, st, m)
+	}))
+	mux.HandleFunc("POST /v1/segments", g.limit(m.count(&m.submitReqs, func(w http.ResponseWriter, r *http.Request) {
 		handleSubmit(w, r, st)
-	}))
-	mux.HandleFunc("POST /v1/vote", g.limit(func(w http.ResponseWriter, r *http.Request) {
+	})))
+	mux.HandleFunc("POST /v1/vote", g.limit(m.count(&m.voteReqs, func(w http.ResponseWriter, r *http.Request) {
 		handleVote(w, r, st)
-	}))
+	})))
+	mux.HandleFunc("GET /metrics", m.handler(st))
 	return mux
 }
 
-func handleBucket(w http.ResponseWriter, r *http.Request, st *Store) {
+func handleBucket(w http.ResponseWriter, r *http.Request, st *Store, m *metrics) {
 	prefix := r.PathValue("prefix")
 	if !validPrefix(prefix) {
 		writeError(w, http.StatusBadRequest, "prefix must be "+strconv.Itoa(core.PrefixLen)+" lowercase hex characters")
@@ -49,6 +50,10 @@ func handleBucket(w http.ResponseWriter, r *http.Request, st *Store) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "bucket unavailable")
 		return
+	}
+	// Counted before padding: decoys would make every lookup look like a hit.
+	if len(entries) > 0 {
+		m.bucketHits.Add(1)
 	}
 	writeJSON(w, http.StatusOK, core.BucketResponse{
 		Prefix:      prefix,

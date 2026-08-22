@@ -42,6 +42,10 @@ type Pipeline struct {
 	Shared Shared
 	Judge  Judge
 	Log    *slog.Logger
+
+	// Diverged counts segments where the local rules disagreed with the shared
+	// database. A run full of divergences means the heuristics drifted.
+	Diverged int
 }
 
 // priority resolves two verdicts for the same segment: a human override beats
@@ -127,6 +131,17 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 	// answer with authority, and its answer is cached so the next run of the
 	// same segment stays offline.
 	if entry, ok := p.lookupShared(hash); ok {
+		// The rules run anyway and their answer is thrown away: how often the
+		// local verdict disagrees with the database is the only measure of
+		// whether the heuristics still track what everyone else derives.
+		if local := p.shift(rules.Apply(seg, doc, p.Cfg.L2), sourceScore); local.Verdict != entry.Verdict {
+			p.Diverged++
+			p.log().Warn("verdict diverges from shared database",
+				"id", seg.ID,
+				"shared", entry.Verdict.String(),
+				"local", local.Verdict.String(),
+				"score", local.Score)
+		}
 		seg.Verdict = entry.Verdict
 		seg.Reasons = entry.Reasons
 		p.store(hash, seg, core.SourceShared)

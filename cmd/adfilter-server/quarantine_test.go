@@ -150,7 +150,7 @@ func TestForgedForwardedIPIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newGuard: %v", err)
 	}
-	mux := newMux(st, untrusted)
+	mux := newMux(st, untrusted, &metrics{})
 	for i := 0; i <= writeBurst; i++ {
 		code := submitAs(t, mux, client(1), "203.0.113.7:4000", fmt.Sprintf("198.51.100.%d", i), entry)
 		if i < writeBurst && code != http.StatusOK {
@@ -165,7 +165,7 @@ func TestForgedForwardedIPIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newGuard: %v", err)
 	}
-	mux = newMux(st, trusted)
+	mux = newMux(st, trusted, &metrics{})
 	for i := 0; i <= writeBurst; i++ {
 		code := submitAs(t, mux, client(1), "203.0.113.7:4000", fmt.Sprintf("198.51.100.%d", i), entry)
 		if code != http.StatusOK {

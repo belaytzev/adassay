@@ -35,6 +35,7 @@ type Store struct {
 	// quorum is how many distinct clients must confirm a verdict before it is
 	// served; tests lower it to keep their fixtures readable.
 	quorum int
+	mx     *metrics
 }
 
 func openStore(path string) (*Store, error) {
@@ -55,6 +56,21 @@ func openStore(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// stats counts what the database holds: verdicts clients can already see, and
+// verdicts still waiting for confirmations.
+func (s *Store) stats() (published, quarantined int, err error) {
+	var total int
+	err = s.db.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(
+			(SELECT COUNT(*) FROM confirmations c
+			 WHERE c.hash = v.hash AND c.norm_version = v.norm_version) >= ?), 0)
+		 FROM verdicts v`, s.quorum).Scan(&total, &published)
+	if err != nil {
+		return 0, 0, fmt.Errorf("server: stats: %w", err)
+	}
+	return published, total - published, nil
+}
 
 // Bucket returns every published verdict whose hash starts with prefix. The
 // prefix is all the server ever learns about what a client is reading. Rows in
@@ -200,8 +216,10 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 			row.Source, row.Reasons = curSource, decodeReasons(curReasons)
 		}
 	case sourceRank(e.Source) <= sourceRank(curSource):
+		s.mx.diverged()
 		return false, curVotes, nil
 	default:
+		s.mx.diverged()
 		changed = true
 	}
 

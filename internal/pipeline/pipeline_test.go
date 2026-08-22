@@ -342,3 +342,29 @@ func TestSharedMissFallsBackToRules(t *testing.T) {
 		t.Errorf("verdict = %v, want drop from the rules", got)
 	}
 }
+
+func TestSharedDivergenceIsCounted(t *testing.T) {
+	var buf bytes.Buffer
+	shared := &fakeShared{}
+	shared.put(adText, core.BucketEntry{Verdict: core.Keep, Source: core.SourceHuman})
+	shared.put(plainText, core.BucketEntry{Verdict: core.Keep, Source: core.SourceHuman})
+	p := &Pipeline{
+		Cfg:    testConfig(t),
+		Cache:  newCache(),
+		Shared: shared,
+		Log:    slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})),
+	}
+
+	run(t, p,
+		core.Segment{ID: "s1", Text: adText, Links: adLinks},
+		core.Segment{ID: "s2", Text: plainText})
+
+	if p.Diverged != 1 {
+		t.Fatalf("Diverged = %d, want 1: the rules call s1 an ad and the database does not", p.Diverged)
+	}
+	for _, want := range []string{"diverges from shared", "id=s1", "shared=keep", "local=drop"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("log missing %q:\n%s", want, buf.String())
+		}
+	}
+}

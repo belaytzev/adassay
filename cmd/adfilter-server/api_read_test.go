@@ -34,7 +34,10 @@ func testMux(st *Store) *http.ServeMux {
 	if err != nil {
 		panic(err)
 	}
-	return newMux(st, g)
+	if st.mx == nil {
+		st.mx = &metrics{}
+	}
+	return newMux(st, g, st.mx)
 }
 
 func get(t *testing.T, st *Store, path string) *httptest.ResponseRecorder {

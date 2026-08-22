@@ -44,9 +44,12 @@ func serve(addr, dbPath, trustedProxies string) error {
 		return err
 	}
 
+	m := &metrics{}
+	st.mx = m
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           newMux(st, g),
+		Handler:           newMux(st, g, m),
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,
 	}
