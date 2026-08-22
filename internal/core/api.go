@@ -65,3 +65,9 @@ type VoteResponse struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
+
+// MinBucket is the number of entries a bucket response must contain. A bucket
+// of one is not anonymity: it tells the server exactly which segment was
+// looked up. Short buckets are padded to this size, and a client that receives
+// fewer entries is talking to a server that does not honour the contract.
+const MinBucket = 8
