@@ -192,3 +192,74 @@ func decodeReasons(s string) []string {
 	}
 	return reasons
 }
+
+// Enqueue spools a verdict for later submission to the shared database. The
+// row lives on disk because a CLI run lasts seconds: holding a batch back "for
+// a few hours" is only possible across processes.
+func (s *Store) Enqueue(e core.SubmitEntry) error {
+	if !core.ValidSource(e.Source) {
+		return fmt.Errorf("store: unknown source %q", e.Source)
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO outbox (hash, norm_version, verdict, reasons, source, created)
+		 VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT (hash, norm_version) DO NOTHING`,
+		e.Hash, core.NormVersion, e.Verdict.String(), encodeReasons(e.Reasons), e.Source, time.Now().Unix())
+	if err != nil {
+		return fmt.Errorf("store: enqueue: %w", err)
+	}
+	return nil
+}
+
+// Pending returns everything waiting to be sent and the age of the oldest row,
+// which is what decides whether a flush is due.
+func (s *Store) Pending() ([]core.SubmitEntry, time.Time, error) {
+	rows, err := s.db.Query(
+		`SELECT hash, verdict, reasons, source, created FROM outbox WHERE norm_version = ? ORDER BY created`,
+		core.NormVersion)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("store: pending: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []core.SubmitEntry
+	var oldest time.Time
+	for rows.Next() {
+		var hash, verdict, reasons, source string
+		var created int64
+		if err := rows.Scan(&hash, &verdict, &reasons, &source, &created); err != nil {
+			return nil, time.Time{}, fmt.Errorf("store: pending: %w", err)
+		}
+		v, err := core.ParseVerdict(verdict)
+		if err != nil {
+			return nil, time.Time{}, fmt.Errorf("store: pending: %w", err)
+		}
+		if oldest.IsZero() {
+			oldest = time.Unix(created, 0).UTC()
+		}
+		entries = append(entries, core.SubmitEntry{Hash: hash, Verdict: v, Reasons: decodeReasons(reasons), Source: source})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, time.Time{}, fmt.Errorf("store: pending: %w", err)
+	}
+	return entries, oldest, nil
+}
+
+// ClearPending drops the rows a flush managed to deliver; anything left keeps
+// waiting for the next run.
+func (s *Store) ClearPending(hashes []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("store: clear outbox: %w", err)
+	}
+	defer tx.Rollback()
+	for _, h := range hashes {
+		if _, err := tx.Exec(`DELETE FROM outbox WHERE hash = ? AND norm_version = ?`, h, core.NormVersion); err != nil {
+			return fmt.Errorf("store: clear outbox: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: clear outbox: %w", err)
+	}
+	return nil
+}

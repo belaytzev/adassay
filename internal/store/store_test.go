@@ -150,3 +150,52 @@ func TestDefaultPathHonoursEnv(t *testing.T) {
 		t.Fatalf("DefaultPath = %q, want an absolute path to verdicts.db", got)
 	}
 }
+
+func TestOutboxRoundTrip(t *testing.T) {
+	s := open(t)
+	entries := []core.SubmitEntry{
+		{Hash: HexHash("first sponsored paragraph"), Verdict: core.Drop, Reasons: []string{"promo_code"}, Source: core.SourceRules},
+		{Hash: HexHash("second sponsored paragraph"), Verdict: core.Drop, Source: core.SourceOllama},
+	}
+	for _, e := range entries {
+		if err := s.Enqueue(e); err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+	}
+	// The same segment seen twice is one row: a duplicate would inflate the
+	// batch and say more about this reader than about the segment.
+	if err := s.Enqueue(entries[0]); err != nil {
+		t.Fatalf("enqueue again: %v", err)
+	}
+
+	pending, oldest, err := s.Pending()
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("want 2 pending entries, got %d", len(pending))
+	}
+	if oldest.IsZero() {
+		t.Error("oldest timestamp missing")
+	}
+	if len(pending[0].Reasons) != 1 || pending[0].Reasons[0] != "promo_code" {
+		t.Errorf("reasons lost on the way to disk: %+v", pending[0])
+	}
+
+	if err := s.ClearPending([]string{entries[0].Hash}); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	pending, _, err = s.Pending()
+	if err != nil {
+		t.Fatalf("pending after clear: %v", err)
+	}
+	if len(pending) != 1 || pending[0].Hash != entries[1].Hash {
+		t.Errorf("clear removed the wrong rows: %+v", pending)
+	}
+}
+
+func TestEnqueueRejectsUnknownSource(t *testing.T) {
+	if err := open(t).Enqueue(core.SubmitEntry{Hash: HexHash("x"), Verdict: core.Drop, Source: "guesswork"}); err == nil {
+		t.Error("want an error for an unknown source")
+	}
+}

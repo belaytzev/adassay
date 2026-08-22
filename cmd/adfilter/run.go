@@ -13,6 +13,7 @@ import (
 	"github.com/belaytzev/adfilter/internal/judge"
 	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/render"
+	"github.com/belaytzev/adfilter/internal/share"
 	"github.com/belaytzev/adfilter/internal/store"
 )
 
@@ -21,20 +22,26 @@ import (
 var errInjection = errors.New("hidden text found")
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
-	if len(args) > 0 && args[0] == "calibrate" {
-		return calibrate(args[1:], stdout)
+	if len(args) > 0 {
+		switch args[0] {
+		case "calibrate":
+			return calibrate(args[1:], stdout)
+		case "vote":
+			return vote(args[1:], stdout)
+		}
 	}
 
 	fs := flag.NewFlagSet("adfilter", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n       adfilter calibrate [flags]\n\nWith no url the page is read from stdin.\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n       adfilter calibrate [flags]\n       adfilter vote <url|hash> --ad|--not-ad\n\nWith no url the page is read from stdin.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	asJSON := fs.Bool("json", false, "print the full Result as JSON instead of markdown")
 	cfgPath := fs.String("config", "", "path to rules.yaml overriding the built-in defaults")
 	dbPath := fs.String("db", "", "path to the local verdict database (default: user cache dir, $"+store.EnvDB+")")
 	verbose := fs.Bool("verbose", false, "report hidden-text findings alongside the document")
+	noShare := fs.Bool("no-share", false, "never send verdicts to the shared database ($"+share.EnvOptOut+")")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -61,6 +68,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	// Without a url there is no domain to count and nothing asked for a
 	// database, so a stdin run stays a pure function of its input.
 	var cache pipeline.Cache
+	var outbox *share.Outbox
+	client := share.New("")
 	if pageURL != "" || *dbPath != "" {
 		s, err := store.Open(*dbPath)
 		if err != nil {
@@ -73,12 +82,17 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 			}
 		}
 		cache = s
+		// Flushed before this run decides anything, so what it records below
+		// cannot leave in the same process.
+		outbox = share.NewOutbox(s, client, *noShare)
+		outbox.Flush()
 	}
 
-	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: cache, Judge: judge.New(cfg.Judge)}).Run(res)
+	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: cache, Shared: shared(client), Judge: judge.New(cfg.Judge)}).Run(res)
 	if err != nil {
 		return err
 	}
+	outbox.Record(res)
 
 	if err := write(stdout, res, *asJSON, *verbose); err != nil {
 		return err
@@ -113,4 +127,13 @@ func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
 	}
 	_, err := fmt.Fprintln(w, render.Markdown(res))
 	return err
+}
+
+// shared keeps a missing endpoint out of the pipeline as a nil interface
+// rather than a typed nil that would be asked and always answer no.
+func shared(c *share.Client) pipeline.Shared {
+	if c == nil {
+		return nil
+	}
+	return c
 }

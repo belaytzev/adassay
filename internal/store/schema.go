@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS verdicts (
 	updated      INTEGER NOT NULL,
 	PRIMARY KEY (hash, norm_version)
 );
+CREATE TABLE IF NOT EXISTS outbox (
+	hash         TEXT    NOT NULL,
+	norm_version INTEGER NOT NULL,
+	verdict      TEXT    NOT NULL,
+	reasons      TEXT    NOT NULL DEFAULT '',
+	source       TEXT    NOT NULL,
+	created      INTEGER NOT NULL,
+	PRIMARY KEY (hash, norm_version)
+);
 CREATE TABLE IF NOT EXISTS domains (
 	hash         BLOB    NOT NULL,
 	norm_version INTEGER NOT NULL,
