@@ -19,9 +19,16 @@ import (
 //go:embed rules.yaml
 var defaultRules []byte
 
+const (
+	FeatureRelSponsored = "rel_sponsored"
+	FeaturePromoCode    = "promo_code"
+	FeatureAffiliate    = "affiliate_link"
+	FeatureDisclaimer   = "disclaimer"
+)
+
 // Features is the canonical list of L2 deterministic features. A weight must
 // exist for every one of them: a missing weight would silently score as zero.
-var Features = []string{"rel_sponsored", "promo_code", "affiliate_link", "disclaimer"}
+var Features = []string{FeatureRelSponsored, FeaturePromoCode, FeatureAffiliate, FeatureDisclaimer}
 
 type Config struct {
 	L1    L1    `yaml:"l1"`
