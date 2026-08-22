@@ -18,6 +18,12 @@ func newMux(st *Store) *http.ServeMux {
 	mux.HandleFunc("GET /v1/segments/{prefix}", func(w http.ResponseWriter, r *http.Request) {
 		handleBucket(w, r, st)
 	})
+	mux.HandleFunc("POST /v1/segments", func(w http.ResponseWriter, r *http.Request) {
+		handleSubmit(w, r, st)
+	})
+	mux.HandleFunc("POST /v1/vote", func(w http.ResponseWriter, r *http.Request) {
+		handleVote(w, r, st)
+	})
 	return mux
 }
 

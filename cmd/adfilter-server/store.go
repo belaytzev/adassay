@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -86,10 +87,20 @@ func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, erro
 // put writes one verdict. Task 18 puts an endpoint in front of it; the read
 // tests need it to have something to read.
 func (s *Store) put(e core.BucketEntry, normVersion int) error {
+	return upsert(s.db, e, normVersion)
+}
+
+// execer is satisfied by both *sql.DB and *sql.Tx: submit needs its write to
+// happen inside its own transaction, put does not care.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func upsert(ex execer, e core.BucketEntry, normVersion int) error {
 	if !core.ValidSource(e.Source) {
 		return fmt.Errorf("server: unknown source %q", e.Source)
 	}
-	_, err := s.db.Exec(
+	_, err := ex.Exec(
 		`INSERT INTO verdicts (hash, norm_version, prefix, verdict, reasons, source, votes, updated)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (hash, norm_version) DO UPDATE SET
@@ -126,4 +137,57 @@ func decodeReasons(s string) []string {
 		return nil
 	}
 	return reasons
+}
+
+// sourceRank orders verdict origins: a machine guess must never overturn a
+// human, and a rules match must never overturn the judge.
+func sourceRank(s string) int {
+	switch s {
+	case core.SourceRules:
+		return 1
+	case core.SourceOllama:
+		return 2
+	case core.SourceHuman:
+		return 3
+	}
+	return 0
+}
+
+// submit merges one incoming verdict into the database and reports whether it
+// was taken. Agreement adds a vote; disagreement is only allowed to rewrite the
+// row when it comes from a stronger source.
+// ponytail: first writer wins inside a tier, per-tier tallies if verdicts start flip-flopping
+func (s *Store) submit(e core.SubmitEntry, normVersion int) (accepted bool, votes int, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, 0, fmt.Errorf("server: submit: %w", err)
+	}
+	defer tx.Rollback()
+
+	row := core.BucketEntry{Hash: e.Hash, Verdict: e.Verdict, Reasons: e.Reasons, Source: e.Source, Votes: 1}
+
+	var curVerdict, curSource, curReasons string
+	var curVotes int
+	switch err := tx.QueryRow(
+		`SELECT verdict, source, reasons, votes FROM verdicts WHERE hash = ? AND norm_version = ?`,
+		e.Hash, normVersion).Scan(&curVerdict, &curSource, &curReasons, &curVotes); {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return false, 0, fmt.Errorf("server: submit: %w", err)
+	case curVerdict == e.Verdict.String():
+		row.Votes = curVotes + 1
+		if sourceRank(e.Source) < sourceRank(curSource) {
+			row.Source, row.Reasons = curSource, decodeReasons(curReasons)
+		}
+	case sourceRank(e.Source) <= sourceRank(curSource):
+		return false, curVotes, nil
+	}
+
+	if err := upsert(tx, row, normVersion); err != nil {
+		return false, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, 0, fmt.Errorf("server: submit: %w", err)
+	}
+	return true, row.Votes, nil
 }
