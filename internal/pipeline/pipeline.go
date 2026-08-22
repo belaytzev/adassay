@@ -8,6 +8,7 @@ import (
 
 	"github.com/belaytzev/adfilter/internal/config"
 	"github.com/belaytzev/adfilter/internal/core"
+	"github.com/belaytzev/adfilter/internal/judge"
 	"github.com/belaytzev/adfilter/internal/rules"
 	"github.com/belaytzev/adfilter/internal/store"
 )
@@ -23,9 +24,16 @@ type Cache interface {
 	Source(domain string, l3 config.L3) (float64, error)
 }
 
+// Judge is the grey-zone arbiter, kept as an interface so a run without a local
+// model is a nil field rather than a stub server.
+type Judge interface {
+	Decide(topic string, segs []core.Segment) map[string]core.Verdict
+}
+
 type Pipeline struct {
 	Cfg   *config.Config
 	Cache Cache
+	Judge Judge
 	Log   *slog.Logger
 }
 
@@ -41,8 +49,9 @@ var priority = map[string]int{
 func Outranks(a, b string) bool { return priority[a] > priority[b] }
 
 // Run decides every segment of an already extracted page and fills in the
-// domain score. Segments left in the grey zone stay Flag: the judge picks them
-// up later, and until then a marker is a more honest answer than a guess.
+// domain score. What the rules leave in the grey zone goes to the judge, and
+// whatever the judge does not answer stays Flag: a marker is a more honest
+// answer than a guess.
 func (p *Pipeline) Run(res core.Result) (core.Result, error) {
 	score := 1.0
 	if p.Cache != nil && res.Domain != "" {
@@ -54,13 +63,46 @@ func (p *Pipeline) Run(res core.Result) (core.Result, error) {
 	}
 	res.SourceScore = score
 	doc := rules.NewDoc(res.Segments)
+	var grey []int
 	for i, seg := range res.Segments {
-		res.Segments[i] = p.segment(seg, doc, score)
+		decided, settled := p.segment(seg, doc, score)
+		res.Segments[i] = decided
+		if !settled && decided.Verdict == core.Flag {
+			grey = append(grey, i)
+		}
 	}
+	p.ask(res, grey)
 	return res, nil
 }
 
-func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64) core.Segment {
+// ask hands the grey zone to the local model. Segments it says nothing about
+// keep their Flag: an unreachable model is a missing opinion, not an error.
+func (p *Pipeline) ask(res core.Result, grey []int) {
+	if p.Judge == nil || len(grey) == 0 {
+		return
+	}
+	batch := make([]core.Segment, len(grey))
+	for i, idx := range grey {
+		batch[i] = res.Segments[idx]
+	}
+	verdicts := p.Judge.Decide(res.Title, batch)
+	for _, idx := range grey {
+		seg := &res.Segments[idx]
+		v, ok := verdicts[seg.ID]
+		if !ok || v == seg.Verdict {
+			continue
+		}
+		seg.Verdict = v
+		seg.Reasons = append(seg.Reasons, judge.Reason)
+		if v == core.Drop {
+			p.store(store.Hash(seg.Text), *seg, core.SourceOllama)
+		}
+	}
+}
+
+// segment returns the decided segment and whether the verdict came from an
+// authority above the rules, which nothing downstream may revisit.
+func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64) (core.Segment, bool) {
 	hash := store.Hash(seg.Text)
 	cached, hit := p.lookup(hash)
 
@@ -71,7 +113,7 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 	if hit && Outranks(cached.Source, core.SourceRules) {
 		seg.Verdict = cached.Verdict
 		seg.Reasons = cached.Reasons
-		return seg
+		return seg, true
 	}
 
 	seg = rules.Apply(seg, doc, p.Cfg.L2)
@@ -86,7 +128,7 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 			"score", seg.Score)
 	}
 	p.remember(hash, seg)
-	return seg
+	return seg, false
 }
 
 // shift is the L3 modifier: distrust in the domain is an additive push on the
@@ -125,14 +167,21 @@ func (p *Pipeline) lookup(hash []byte) (store.Record, bool) {
 // remember caches confident findings only: a Keep is the default answer and a
 // Flag is a question left for the judge, neither is worth a row.
 func (p *Pipeline) remember(hash []byte, seg core.Segment) {
-	if p.Cache == nil || seg.Verdict != core.Drop {
+	if seg.Verdict != core.Drop {
+		return
+	}
+	p.store(hash, seg, core.SourceRules)
+}
+
+func (p *Pipeline) store(hash []byte, seg core.Segment, source string) {
+	if p.Cache == nil {
 		return
 	}
 	rec := store.Record{
 		Hash:    hash,
 		Verdict: seg.Verdict,
 		Reasons: seg.Reasons,
-		Source:  core.SourceRules,
+		Source:  source,
 	}
 	if err := p.Cache.Upsert(rec); err != nil {
 		p.log().Warn("cache upsert failed", "id", seg.ID, "err", err)

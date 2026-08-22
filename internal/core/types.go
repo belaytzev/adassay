@@ -93,6 +93,7 @@ type Finding struct {
 }
 
 type Result struct {
+	Title       string    `json:"title,omitempty"`
 	Text        string    `json:"text"`
 	Segments    []Segment `json:"segments"`
 	Hidden      []Finding `json:"hidden,omitempty"`

@@ -11,6 +11,7 @@ import (
 	"github.com/belaytzev/adfilter/internal/config"
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/extract"
+	"github.com/belaytzev/adfilter/internal/judge"
 	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/render"
 	"github.com/belaytzev/adfilter/internal/store"
@@ -81,7 +82,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		cache = s
 	}
 
-	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: cache}).Run(res)
+	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: cache, Judge: judge.New(cfg.Judge)}).Run(res)
 	if err != nil {
 		return err
 	}

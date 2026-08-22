@@ -48,6 +48,7 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 		texts[i] = s.Text
 	}
 	return core.Result{
+		Title:    art.Title,
 		Text:     strings.Join(texts, "\n\n"),
 		Segments: segs,
 		Hidden:   hidden.findings,
