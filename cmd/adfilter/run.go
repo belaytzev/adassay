@@ -11,6 +11,7 @@ import (
 	"github.com/belaytzev/adfilter/internal/config"
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/extract"
+	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/render"
 	"github.com/belaytzev/adfilter/internal/store"
 )
@@ -59,10 +60,26 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	if res.Domain != "" {
-		if err := visit(*dbPath, res.Domain, len(res.Hidden)); err != nil {
+	// Without a url there is no domain to count and nothing asked for a
+	// database, so a stdin run stays a pure function of its input.
+	var cache pipeline.Cache
+	if pageURL != "" || *dbPath != "" {
+		s, err := store.Open(*dbPath)
+		if err != nil {
 			return err
 		}
+		defer s.Close()
+		if res.Domain != "" {
+			if err := s.Visit(res.Domain, len(res.Hidden)); err != nil {
+				return err
+			}
+		}
+		cache = s
+	}
+
+	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: cache}).Run(res)
+	if err != nil {
+		return err
 	}
 
 	if err := write(stdout, res, *asJSON, *verbose); err != nil {
@@ -106,17 +123,6 @@ func fetch(pageURL string) ([]byte, error) {
 		return nil, fmt.Errorf("adfilter: fetch %s: %w", pageURL, err)
 	}
 	return page, nil
-}
-
-// visit is what feeds the domain score later: how often a source was read and
-// how often it carried hidden text.
-func visit(dbPath, domain string, findings int) error {
-	s, err := store.Open(dbPath)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-	return s.Visit(domain, findings)
 }
 
 func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
