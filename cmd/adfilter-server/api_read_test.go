@@ -21,13 +21,26 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
+	// One client is enough to publish here: the tests below are about what a
+	// bucket looks like, not about how many strangers had to agree first.
+	st.quorum = 1
 	return st
+}
+
+// testMux gives every request a fresh limiter, so tests that are not about
+// rate limiting never trip it.
+func testMux(st *Store) *http.ServeMux {
+	g, err := newGuard("")
+	if err != nil {
+		panic(err)
+	}
+	return newMux(st, g)
 }
 
 func get(t *testing.T, st *Store, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
-	newMux(st).ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+	testMux(st).ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 	return w
 }
 
@@ -181,7 +194,7 @@ func TestSharedClientAgainstLiveServer(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 
-	srv := httptest.NewServer(newMux(st))
+	srv := httptest.NewServer(testMux(st))
 	defer srv.Close()
 
 	c := &share.Client{BaseURL: srv.URL, HTTP: srv.Client()}

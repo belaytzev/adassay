@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/belaytzev/adfilter/internal/core"
@@ -29,7 +30,12 @@ CREATE TABLE IF NOT EXISTS verdicts (
 CREATE INDEX IF NOT EXISTS verdicts_bucket ON verdicts (norm_version, prefix);
 `
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+	// quorum is how many distinct clients must confirm a verdict before it is
+	// served; tests lower it to keep their fixtures readable.
+	quorum int
+}
 
 func openStore(path string) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "" {
@@ -41,22 +47,27 @@ func openStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("server: open %s: %w", path, err)
 	}
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + quarantineSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("server: schema: %w", err)
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, quorum: defaultQuorum}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// Bucket returns every verdict whose hash starts with prefix. The prefix is all
-// the server ever learns about what a client is reading.
+// Bucket returns every published verdict whose hash starts with prefix. The
+// prefix is all the server ever learns about what a client is reading. Rows in
+// quarantine are withheld: an unconfirmed verdict is one stranger's claim, and
+// serving it would let that stranger rewrite what every client sees.
 func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, error) {
 	rows, err := s.db.Query(
-		`SELECT hash, verdict, reasons, source, votes FROM verdicts
-		 WHERE norm_version = ? AND prefix = ? ORDER BY hash`,
-		normVersion, prefix)
+		`SELECT v.hash, v.verdict, v.reasons, v.source, v.votes FROM verdicts v
+		 WHERE v.norm_version = ? AND v.prefix = ?
+		   AND (SELECT COUNT(*) FROM confirmations c
+		        WHERE c.hash = v.hash AND c.norm_version = v.norm_version) >= ?
+		 ORDER BY v.hash`,
+		normVersion, prefix, s.quorum)
 	if err != nil {
 		return nil, fmt.Errorf("server: bucket: %w", err)
 	}
@@ -84,10 +95,18 @@ func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, erro
 	return entries, rows.Err()
 }
 
-// put writes one verdict. Task 18 puts an endpoint in front of it; the read
-// tests need it to have something to read.
+// put writes one verdict as already published: it is the seeding path for the
+// read tests, which need a bucket to read without staging a quorum of clients.
 func (s *Store) put(e core.BucketEntry, normVersion int) error {
-	return upsert(s.db, e, normVersion)
+	if err := upsert(s.db, e, normVersion); err != nil {
+		return err
+	}
+	for i := 0; i < s.quorum; i++ {
+		if err := confirm(s.db, e.Hash, normVersion, "seed-"+strconv.Itoa(i), false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // execer is satisfied by both *sql.DB and *sql.Tx: submit needs its write to
@@ -157,7 +176,7 @@ func sourceRank(s string) int {
 // was taken. Agreement adds a vote; disagreement is only allowed to rewrite the
 // row when it comes from a stronger source.
 // ponytail: first writer wins inside a tier, per-tier tallies if verdicts start flip-flopping
-func (s *Store) submit(e core.SubmitEntry, normVersion int) (accepted bool, votes int, err error) {
+func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (accepted bool, votes int, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, 0, fmt.Errorf("server: submit: %w", err)
@@ -168,6 +187,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int) (accepted bool, vote
 
 	var curVerdict, curSource, curReasons string
 	var curVotes int
+	changed := false
 	switch err := tx.QueryRow(
 		`SELECT verdict, source, reasons, votes FROM verdicts WHERE hash = ? AND norm_version = ?`,
 		e.Hash, normVersion).Scan(&curVerdict, &curSource, &curReasons, &curVotes); {
@@ -181,9 +201,14 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int) (accepted bool, vote
 		}
 	case sourceRank(e.Source) <= sourceRank(curSource):
 		return false, curVotes, nil
+	default:
+		changed = true
 	}
 
 	if err := upsert(tx, row, normVersion); err != nil {
+		return false, 0, err
+	}
+	if err := confirm(tx, e.Hash, normVersion, clientID, changed); err != nil {
 		return false, 0, err
 	}
 	if err := tx.Commit(); err != nil {

@@ -20,7 +20,7 @@ func post(t *testing.T, st *Store, path, body string) *httptest.ResponseRecorder
 	t.Helper()
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
-	newMux(st).ServeHTTP(w, r)
+	testMux(st).ServeHTTP(w, r)
 	return w
 }
 

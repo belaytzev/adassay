@@ -13,17 +13,17 @@ import (
 
 const hexDigits = "0123456789abcdef"
 
-func newMux(st *Store) *http.ServeMux {
+func newMux(st *Store, g *guard) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/segments/{prefix}", func(w http.ResponseWriter, r *http.Request) {
 		handleBucket(w, r, st)
 	})
-	mux.HandleFunc("POST /v1/segments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/segments", g.limit(func(w http.ResponseWriter, r *http.Request) {
 		handleSubmit(w, r, st)
-	})
-	mux.HandleFunc("POST /v1/vote", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	mux.HandleFunc("POST /v1/vote", g.limit(func(w http.ResponseWriter, r *http.Request) {
 		handleVote(w, r, st)
-	})
+	}))
 	return mux
 }
 
