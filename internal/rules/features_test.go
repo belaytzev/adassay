@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,9 +18,9 @@ func patterns(t *testing.T) config.Patterns {
 	return cfg.L2.Patterns
 }
 
-func fires(t *testing.T, feature string, seg core.Segment) bool {
+func fires(t *testing.T, feature string, seg core.Segment, doc Doc) bool {
 	t.Helper()
-	for _, f := range Detect(seg, patterns(t)) {
+	for _, f := range Detect(seg, doc, patterns(t)) {
 		if f == feature {
 			return true
 		}
@@ -43,7 +44,7 @@ func TestRelSponsored(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			seg := core.Segment{Text: "a review", Links: []core.Link{{Href: "https://shop.example/x", Rel: c.rel}}}
-			if got := fires(t, config.FeatureRelSponsored, seg); got != c.want {
+			if got := fires(t, config.FeatureRelSponsored, seg, Doc{}); got != c.want {
 				t.Errorf("rel=%q fired = %v, want %v", c.rel, got, c.want)
 			}
 		})
@@ -67,7 +68,7 @@ func TestPromoCode(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := fires(t, config.FeaturePromoCode, core.Segment{Text: c.text}); got != c.want {
+			if got := fires(t, config.FeaturePromoCode, core.Segment{Text: c.text}, Doc{}); got != c.want {
 				t.Errorf("%q fired = %v, want %v", c.text, got, c.want)
 			}
 		})
@@ -94,7 +95,7 @@ func TestAffiliateLink(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			seg := core.Segment{Text: "buy it", Links: []core.Link{{Href: c.href}}}
-			if got := fires(t, config.FeatureAffiliate, seg); got != c.want {
+			if got := fires(t, config.FeatureAffiliate, seg, Doc{}); got != c.want {
 				t.Errorf("%q fired = %v, want %v", c.href, got, c.want)
 			}
 		})
@@ -118,7 +119,56 @@ func TestDisclaimer(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := fires(t, config.FeatureDisclaimer, core.Segment{Text: c.text}); got != c.want {
+			if got := fires(t, config.FeatureDisclaimer, core.Segment{Text: c.text}, Doc{}); got != c.want {
+				t.Errorf("%q fired = %v, want %v", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestBrandDensity(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		doc  []string
+		want bool
+	}{
+		{"repeated name the article ignores", "Produced in partnership with ShieldPath, and ShieldPath paid for the placement.", nil, true},
+		{"mentioned once", "Teams have been moving to TurboLane CI, which bills by the minute.", nil, false},
+		{"repeated but the article is about it", "The ShieldPath client leaks on reconnect, and ShieldPath knows it.",
+			[]string{"ShieldPath publishes an audit every year.", "Compare that to how ShieldPath handles DNS."}, false},
+		{"sentence-initial word is not a brand", "Because it caches. Because it caches, the build is fast.", nil, false},
+		{"plain prose", "The compiler rewrites the loop into a single pass.", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			segs := []core.Segment{{ID: "s1", Text: c.text}}
+			for i, extra := range c.doc {
+				segs = append(segs, core.Segment{ID: fmt.Sprintf("s%d", i+2), Text: extra})
+			}
+			doc := NewDoc(segs)
+			if got := fires(t, config.FeatureBrandDensity, segs[0], doc); got != c.want {
+				t.Errorf("%q fired = %v, want %v", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestCTAUrgency(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"both halves", "Use code TYPE20 at checkout for twenty percent off during launch week.", true},
+		{"russian", "Успей оформить заказ, предложение только сегодня.", true},
+		{"cta without urgency", "Readers can get three months free at checkout, and the plan renews afterwards.", false},
+		{"urgency without cta", "The migration window ends soon, so plan the switch now.", false},
+		{"neither", "Hot swap sockets are the feature to insist on.", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := fires(t, config.FeatureCTAUrgency, core.Segment{Text: c.text}, Doc{}); got != c.want {
 				t.Errorf("%q fired = %v, want %v", c.text, got, c.want)
 			}
 		})
@@ -127,10 +177,10 @@ func TestDisclaimer(t *testing.T) {
 
 func TestDetectOrderAndIndependence(t *testing.T) {
 	seg := core.Segment{
-		Text:  "На правах рекламы: используйте промокод SAVE20.",
+		Text:  "На правах рекламы: используйте промокод SAVE20. Успей купить ShopMax, ShopMax только сегодня со скидкой.",
 		Links: []core.Link{{Href: "https://shop.example/x?ref=blog", Rel: "sponsored"}},
 	}
-	got := Detect(seg, patterns(t))
+	got := Detect(seg, Doc{}, patterns(t))
 	want := config.Features
 	if len(got) != len(want) {
 		t.Fatalf("Detect = %v, want all of %v", got, want)
@@ -140,7 +190,7 @@ func TestDetectOrderAndIndependence(t *testing.T) {
 			t.Errorf("Detect[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
-	if got := Detect(core.Segment{Text: "A plain paragraph about databases."}, patterns(t)); len(got) != 0 {
+	if got := Detect(core.Segment{Text: "A plain paragraph about databases."}, Doc{}, patterns(t)); len(got) != 0 {
 		t.Errorf("Detect on neutral text = %v, want none", got)
 	}
 }

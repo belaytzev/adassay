@@ -15,12 +15,14 @@ import (
 
 // Detect returns the features a segment fires, in the canonical order of
 // config.Features.
-func Detect(seg core.Segment, p config.Patterns) []string {
+func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 	fired := map[string]bool{
 		config.FeatureRelSponsored: relSponsored(seg.Links),
 		config.FeaturePromoCode:    promoCode(seg.Text, p.PromoWords),
 		config.FeatureAffiliate:    affiliate(seg.Links, p),
 		config.FeatureDisclaimer:   matchesAny(seg.Text, p.Disclaimers),
+		config.FeatureBrandDensity: brandDensity(seg.Text, doc),
+		config.FeatureCTAUrgency:   matchesAny(seg.Text, p.CTAWords) && matchesAny(seg.Text, p.UrgencyWords),
 	}
 	var out []string
 	for _, f := range config.Features {
@@ -29,6 +31,66 @@ func Detect(seg core.Segment, p config.Patterns) []string {
 		}
 	}
 	return out
+}
+
+// Doc is the document a segment was cut from: how many of its segments mention
+// each name. The fuzzy features are relative — a brand is only suspicious when
+// the rest of the article ignores it. The zero Doc is a document of one
+// segment, which is what checking a bare piece of text is.
+type Doc struct {
+	brand map[string]int
+}
+
+func NewDoc(segs []core.Segment) Doc {
+	d := Doc{brand: make(map[string]int)}
+	for _, s := range segs {
+		for b := range brands(s.Text) {
+			d.brand[b]++
+		}
+	}
+	return d
+}
+
+// brandToken is a name as markup leaves it: a capitalised run, internal capitals
+// kept, so NordVPN and TurboLane survive as one token.
+var brandToken = regexp.MustCompile(`\p{Lu}[\p{L}\p{Nd}]{2,}`)
+
+// brands counts name mentions in one text. A capital that opens a sentence is
+// grammar rather than a name, and is not counted — otherwise every "Because"
+// is a brand.
+func brands(text string) map[string]int {
+	out := map[string]int{}
+	for _, m := range brandToken.FindAllStringIndex(text, -1) {
+		if !bounded(text, m[0], m[1]-m[0]) || sentenceStart(text, m[0]) {
+			continue
+		}
+		out[text[m[0]:m[1]]]++
+	}
+	return out
+}
+
+func sentenceStart(s string, i int) bool {
+	for j := i; j > 0; {
+		r, n := utf8.DecodeLastRuneInString(s[:j])
+		j -= n
+		if unicode.IsSpace(r) {
+			continue
+		}
+		return r == '.' || r == '!' || r == '?' || r == ':'
+	}
+	return true
+}
+
+// brandDensity fires when a name is repeated inside one segment and the rest of
+// the document does not mention it: the paragraph is about that product, the
+// article is not.
+func brandDensity(text string, doc Doc) bool {
+	for b, n := range brands(text) {
+		if n >= 2 && doc.brand[b] <= 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func relSponsored(links []core.Link) bool {

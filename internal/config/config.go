@@ -24,11 +24,16 @@ const (
 	FeaturePromoCode    = "promo_code"
 	FeatureAffiliate    = "affiliate_link"
 	FeatureDisclaimer   = "disclaimer"
+	FeatureBrandDensity = "brand_density"
+	FeatureCTAUrgency   = "cta_urgency"
 )
 
-// Features is the canonical list of L2 deterministic features. A weight must
-// exist for every one of them: a missing weight would silently score as zero.
-var Features = []string{FeatureRelSponsored, FeaturePromoCode, FeatureAffiliate, FeatureDisclaimer}
+// Features is the canonical list of L2 features. A weight must exist for every
+// one of them: a missing weight would silently score as zero.
+var Features = []string{
+	FeatureRelSponsored, FeaturePromoCode, FeatureAffiliate, FeatureDisclaimer,
+	FeatureBrandDensity, FeatureCTAUrgency,
+}
 
 type Config struct {
 	L1    L1    `yaml:"l1"`
@@ -70,6 +75,8 @@ type Patterns struct {
 	Disclaimers     []string `yaml:"disclaimers"`
 	AffiliateParams []string `yaml:"affiliate_params"`
 	AffiliateHosts  []string `yaml:"affiliate_hosts"`
+	CTAWords        []string `yaml:"cta_words"`
+	UrgencyWords    []string `yaml:"urgency_words"`
 }
 
 type L3 struct {
@@ -169,6 +176,8 @@ func (c *Config) Validate() error {
 		"disclaimers":      c.L2.Patterns.Disclaimers,
 		"affiliate_params": c.L2.Patterns.AffiliateParams,
 		"affiliate_hosts":  c.L2.Patterns.AffiliateHosts,
+		"cta_words":        c.L2.Patterns.CTAWords,
+		"urgency_words":    c.L2.Patterns.UrgencyWords,
 	} {
 		if len(list) == 0 {
 			return fmt.Errorf("config: l2.patterns.%s is empty", name)

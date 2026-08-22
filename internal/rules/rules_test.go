@@ -98,7 +98,7 @@ func TestShortcutBypassesWeights(t *testing.T) {
 	if got := Apply(core.Segment{
 		Text:  "Use code SAVE20 at checkout.",
 		Links: []core.Link{{Href: "https://shop.example/x", Rel: "sponsored"}},
-	}, c).Verdict; got != core.Drop {
+	}, Doc{}, c).Verdict; got != core.Drop {
 		t.Fatalf("Apply verdict = %v, want drop", got)
 	}
 }
@@ -118,7 +118,7 @@ func TestApply(t *testing.T) {
 	clean := Apply(core.Segment{
 		Text:  "The compiler rewrites the loop into a single pass over the slice.",
 		Links: []core.Link{{Href: "https://go.dev/doc"}},
-	}, c)
+	}, Doc{}, c)
 	if clean.Verdict != core.Keep {
 		t.Fatalf("clean segment verdict = %v, want keep", clean.Verdict)
 	}
@@ -129,7 +129,7 @@ func TestApply(t *testing.T) {
 	ad := Apply(core.Segment{
 		Text:  "На правах рекламы: подписка со скидкой.",
 		Links: []core.Link{{Href: "https://go.skimresources.com/?id=1"}},
-	}, c)
+	}, Doc{}, c)
 	if ad.Verdict != core.Drop {
 		t.Fatalf("ad segment verdict = %v (score %v), want drop", ad.Verdict, ad.Score)
 	}

@@ -30,6 +30,8 @@ l2:
     promo_code: 2.0
     affiliate_link: 1.5
     disclaimer: 2.5
+    brand_density: 0.5
+    cta_urgency: 0.8
   shortcuts:
     - features: [rel_sponsored, promo_code]
       verdict: drop
@@ -67,6 +69,30 @@ l2:
       - shareasale.com
       - impact.com
       - click.linksynergy.com
+    cta_words:
+      - at checkout
+      - buy now
+      - order now
+      - sign up
+      - get started
+      - claim your
+      - shop now
+      - оформить заказ
+      - купить
+      - по ссылке
+      - успей
+    urgency_words:
+      - limited time
+      - today only
+      - while supplies last
+      - hurry
+      - ends soon
+      - last chance
+      - launch week
+      - только сегодня
+      - ограниченное предложение
+      - успей
+      - последний шанс
 
 l3:
   min_visits: 5

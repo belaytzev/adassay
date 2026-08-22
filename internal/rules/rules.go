@@ -10,8 +10,8 @@ import (
 // Apply runs L2 over a segment: detect the deterministic features, score them
 // and set the verdict. The returned segment carries the fired features as its
 // reasons, so a Flag stays explainable downstream.
-func Apply(seg core.Segment, l2 config.L2) core.Segment {
-	features := Detect(seg, l2.Patterns)
+func Apply(seg core.Segment, doc Doc, l2 config.L2) core.Segment {
+	features := Detect(seg, doc, l2.Patterns)
 	seg.Reasons = features
 	seg.Score = Score(features, l2)
 	if v, ok := Shortcut(features, l2); ok {

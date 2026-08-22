@@ -160,9 +160,10 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 			return ev, fmt.Errorf("calibrate: %s: %w", p.File, err)
 		}
 		matched := make([]bool, len(p.Ads))
+		doc := rules.NewDoc(res.Segments)
 		for _, seg := range res.Segments {
 			s := scored{page: p.File, id: seg.ID, text: seg.Text}
-			features := rules.Detect(seg, cfg.L2.Patterns)
+			features := rules.Detect(seg, doc, cfg.L2.Patterns)
 			s.features = features
 			s.score = rules.Score(features, cfg.L2)
 			s.forced, s.shortcut = rules.Shortcut(features, cfg.L2)

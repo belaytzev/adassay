@@ -53,13 +53,14 @@ func (p *Pipeline) Run(res core.Result) (core.Result, error) {
 		score = s
 	}
 	res.SourceScore = score
+	doc := rules.NewDoc(res.Segments)
 	for i, seg := range res.Segments {
-		res.Segments[i] = p.segment(seg, score)
+		res.Segments[i] = p.segment(seg, doc, score)
 	}
 	return res, nil
 }
 
-func (p *Pipeline) segment(seg core.Segment, sourceScore float64) core.Segment {
+func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64) core.Segment {
 	hash := store.Hash(seg.Text)
 	cached, hit := p.lookup(hash)
 
@@ -73,7 +74,7 @@ func (p *Pipeline) segment(seg core.Segment, sourceScore float64) core.Segment {
 		return seg
 	}
 
-	seg = rules.Apply(seg, p.Cfg.L2)
+	seg = rules.Apply(seg, doc, p.Cfg.L2)
 	seg = p.shift(seg, sourceScore)
 
 	if hit && cached.Verdict != seg.Verdict {

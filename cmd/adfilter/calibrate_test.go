@@ -12,7 +12,7 @@ const corpusDir = "../../testdata/corpus"
 // that trades precision for recall has to be argued for by moving these lines,
 // not by letting the numbers drift.
 const (
-	minRecall   = 0.50
+	minRecall   = 0.55
 	minCoverage = 1.00
 	maxNoise    = 7
 )
