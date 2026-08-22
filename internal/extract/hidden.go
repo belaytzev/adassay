@@ -26,13 +26,22 @@ const (
 	KindTemplate  = "template"
 	KindColor     = "color_on_color"
 	KindLongAttr  = "long_attr"
+	KindInvisible = "invisible_unicode"
 )
 
 const sampleLen = 300
 
+// minWords is how many words a long attribute needs before it reads as text
+// rather than as encoded data.
+const minWords = 5
+
 // offScreenPx is how far a coordinate has to be pushed out before it counts as
 // hiding rather than layout.
 const offScreenPx = -500
+
+// zeroWidthRun is where invisible code points stop reading as typography —
+// emoji joiners, word joiners, soft break hints — and start reading as a payload.
+const zeroWidthRun = 8
 
 // Hidden reports nodes the page keeps out of sight. It reads static markup
 // only: inline styles, attributes and node types.
@@ -45,14 +54,35 @@ func Hidden(r io.Reader, cfg config.L1) ([]core.Finding, error) {
 	}
 	var out []core.Finding
 	walk(doc, cfg, &out)
-	return out, nil
+	return dedupe(out), nil
+}
+
+// dedupe collapses repeated findings: templated markup repeats the same hidden
+// string on every widget of a page, and counting it ten times would inflate the
+// domain score off a single piece of boilerplate.
+func dedupe(in []core.Finding) []core.Finding {
+	seen := make(map[core.Finding]bool, len(in))
+	var out []core.Finding
+	for _, f := range in {
+		if seen[f] {
+			continue
+		}
+		seen[f] = true
+		out = append(out, f)
+	}
+	return out
 }
 
 func walk(n *html.Node, cfg config.L1, out *[]core.Finding) {
 	switch n.Type {
 	case html.CommentNode:
-		if s := collapse(n.Data); hasLetters(s) {
+		if s := collapse(n.Data); significant(s, cfg) {
 			*out = append(*out, core.Finding{Kind: KindComment, Sample: sample(s)})
+		}
+		return
+	case html.TextNode:
+		if s := invisible(n.Data); s != "" {
+			*out = append(*out, core.Finding{Kind: KindInvisible, Sample: sample(s)})
 		}
 		return
 	case html.ElementNode:
@@ -61,7 +91,7 @@ func walk(n *html.Node, cfg config.L1, out *[]core.Finding) {
 			return
 		}
 		if kind := classify(n); kind != "" {
-			if s := nodeText(n); hasLetters(s) {
+			if s := nodeText(n); significant(s, cfg) {
 				*out = append(*out, core.Finding{Kind: kind, Sample: sample(s)})
 				return
 			}
@@ -117,11 +147,18 @@ func longAttrs(n *html.Node, cfg config.L1) []core.Finding {
 	}
 	for _, name := range names {
 		v := collapse(attr(n, name))
-		if len([]rune(v)) > cfg.LongAttrLength {
+		if len([]rune(v)) > cfg.LongAttrLength && prose(v) {
 			out = append(out, core.Finding{Kind: KindLongAttr, Sample: sample(v)})
 		}
 	}
 	return out
+}
+
+// prose keeps machine payloads out of the attribute detector: citation
+// metadata, encoded query strings and ids are long but carry no words, while an
+// injection aimed at a reader is written as sentences.
+func prose(s string) bool {
+	return len(strings.Fields(s)) >= minWords
 }
 
 // parseStyle turns an inline style attribute into normalised declarations.
@@ -214,6 +251,65 @@ func collect(n *html.Node, b *strings.Builder) {
 
 func collapse(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// significant separates an injection from ordinary invisible markup. aria-hidden
+// and off-screen text are legitimate on half the web, so a candidate only counts
+// when it is long enough to carry a message, tells the reader what to do, or
+// addresses an agent by name.
+func significant(s string, cfg config.L1) bool {
+	if !hasLetters(s) {
+		return false
+	}
+	if len([]rune(s)) > cfg.MinLength {
+		return true
+	}
+	low := strings.ToLower(s)
+	for _, list := range [][]string{cfg.Imperatives, cfg.AgentNames} {
+		for _, p := range list {
+			if strings.Contains(low, strings.ToLower(p)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// invisible reports text smuggled through code points that render as nothing.
+// Unicode tag characters carry a full ASCII payload and are decoded back; a long
+// run of zero-width characters carries no readable text but is never typography,
+// so it is reported together with the text it was hidden in.
+func invisible(s string) string {
+	var payload strings.Builder
+	zeros := 0
+	for _, r := range s {
+		switch {
+		case r >= 0xE0000 && r <= 0xE007F:
+			if r >= 0xE0020 && r <= 0xE007E {
+				payload.WriteRune(r - 0xE0000)
+			}
+		case r == 0x200B, r == 0x200C, r == 0x200D, r == 0x2060, r == 0xFEFF:
+			zeros++
+		}
+	}
+	if p := collapse(payload.String()); hasLetters(p) {
+		return p
+	}
+	if zeros >= zeroWidthRun {
+		return strconv.Itoa(zeros) + " zero-width characters in: " + collapse(strings.Map(dropInvisible, s))
+	}
+	return ""
+}
+
+func dropInvisible(r rune) rune {
+	if r >= 0xE0000 && r <= 0xE007F {
+		return -1
+	}
+	switch r {
+	case 0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF:
+		return -1
+	}
+	return r
 }
 
 func hasLetters(s string) bool {
