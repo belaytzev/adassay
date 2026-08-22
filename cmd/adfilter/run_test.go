@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,9 +73,13 @@ func TestRunFetchesURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	db := filepath.Join(t.TempDir(), "verdicts.db")
 	var out bytes.Buffer
-	if err := run([]string{srv.URL}, strings.NewReader("unused"), &out); err != nil {
+	if err := run([]string{"--db", db, srv.URL}, strings.NewReader("unused"), &out); err != nil {
 		t.Fatalf("run: %v", err)
+	}
+	if _, err := os.Stat(db); err != nil {
+		t.Errorf("--db was ignored: %v", err)
 	}
 	if gotUA != userAgent {
 		t.Errorf("User-Agent = %q, want %q", gotUA, userAgent)

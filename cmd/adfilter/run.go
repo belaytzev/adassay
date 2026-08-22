@@ -12,6 +12,7 @@ import (
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/extract"
 	"github.com/belaytzev/adfilter/internal/render"
+	"github.com/belaytzev/adfilter/internal/store"
 )
 
 // errInjection makes hidden-text findings visible to a shell: the document is
@@ -33,13 +34,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	asJSON := fs.Bool("json", false, "print the full Result as JSON instead of markdown")
 	cfgPath := fs.String("config", "", "path to rules.yaml overriding the built-in defaults")
-	// ponytail: --db is parsed but unused until the verdict store exists (Task 10).
-	dbPath := fs.String("db", "", "path to the local verdict database")
+	dbPath := fs.String("db", "", "path to the local verdict database (default: user cache dir, $"+store.EnvDB+")")
 	verbose := fs.Bool("verbose", false, "report hidden-text findings alongside the document")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	_ = *dbPath
 	if fs.NArg() > 1 {
 		return fmt.Errorf("adfilter: want at most one url, got %d", fs.NArg())
 	}
@@ -58,6 +57,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	res, err := extract.Extract(page, pageURL, cfg.L1)
 	if err != nil {
 		return err
+	}
+
+	if res.Domain != "" {
+		if err := visit(*dbPath, res.Domain, len(res.Hidden)); err != nil {
+			return err
+		}
 	}
 
 	if err := write(stdout, res, *asJSON, *verbose); err != nil {
@@ -101,6 +106,17 @@ func fetch(pageURL string) ([]byte, error) {
 		return nil, fmt.Errorf("adfilter: fetch %s: %w", pageURL, err)
 	}
 	return page, nil
+}
+
+// visit is what feeds the domain score later: how often a source was read and
+// how often it carried hidden text.
+func visit(dbPath, domain string, findings int) error {
+	s, err := store.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	return s.Visit(domain, findings)
 }
 
 func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
