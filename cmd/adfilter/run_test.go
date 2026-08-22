@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/belaytzev/adfilter/internal/core"
+	"github.com/belaytzev/adfilter/internal/fetch"
 )
 
 const cleanPage = `<html><body><article>
@@ -81,8 +82,8 @@ func TestRunFetchesURL(t *testing.T) {
 	if _, err := os.Stat(db); err != nil {
 		t.Errorf("--db was ignored: %v", err)
 	}
-	if gotUA != userAgent {
-		t.Errorf("User-Agent = %q, want %q", gotUA, userAgent)
+	if gotUA != fetch.UserAgent {
+		t.Errorf("User-Agent = %q, want %q", gotUA, fetch.UserAgent)
 	}
 	if !strings.Contains(out.String(), "burr grinder") {
 		t.Errorf("fetched text missing:\n%s", out.String())

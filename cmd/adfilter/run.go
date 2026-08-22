@@ -5,12 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
-	"time"
 
 	"github.com/belaytzev/adfilter/internal/config"
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/extract"
+	"github.com/belaytzev/adfilter/internal/fetch"
 	"github.com/belaytzev/adfilter/internal/judge"
 	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/render"
@@ -20,12 +19,6 @@ import (
 // errInjection makes hidden-text findings visible to a shell: the document is
 // still printed, but the exit code lets a script or a CI job refuse the source.
 var errInjection = errors.New("hidden text found")
-
-const (
-	fetchTimeout = 20 * time.Second
-	userAgent    = "adfilter/0.1 (+https://github.com/belaytzev/adfilter)"
-	maxBody      = 8 << 20
-)
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	if len(args) > 0 && args[0] == "calibrate" {
@@ -98,36 +91,13 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 
 func read(pageURL string, stdin io.Reader) ([]byte, error) {
 	if pageURL == "" {
-		page, err := io.ReadAll(io.LimitReader(stdin, maxBody))
+		page, err := io.ReadAll(io.LimitReader(stdin, fetch.MaxBody))
 		if err != nil {
 			return nil, fmt.Errorf("adfilter: read stdin: %w", err)
 		}
 		return page, nil
 	}
-	return fetch(pageURL)
-}
-
-func fetch(pageURL string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("adfilter: %w", err)
-	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml")
-
-	resp, err := (&http.Client{Timeout: fetchTimeout}).Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("adfilter: fetch: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("adfilter: fetch %s: %s", pageURL, resp.Status)
-	}
-	page, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-	if err != nil {
-		return nil, fmt.Errorf("adfilter: fetch %s: %w", pageURL, err)
-	}
-	return page, nil
+	return fetch.Get(pageURL)
 }
 
 func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
