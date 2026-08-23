@@ -1,111 +1,115 @@
 # adassay
 
-Adblock для AI-агентов: режет рекламные и маркетинговые вставки из текста, который агент
-собирается проглотить как факты.
+An ad blocker for AI agents. It strips promotional and marketing inserts from text an agent
+is about to swallow as fact.
 
-## Чем это отличается от того, что уже есть
+## How this differs from what already exists
 
-| Класс | Что режет | Чего не видит |
+| Class | What it strips | What it misses |
 |---|---|---|
-| Boilerplate-экстракторы (trafilatura, readability, defuddle, Jina Reader) | структурную рекламу: баннеры, сайдбары, промо-блоки | нативную вставку внутри абзаца — для них это текст статьи |
-| Классический adblock (uBlock, EasyList) | по URL и CSS-селекторам | текст, вообще ничего |
-| Guardrails против prompt injection | инструкции агенту | убеждение — грамматически валидный предвзятый контент |
+| Boilerplate extractors (trafilatura, readability, defuddle, Jina Reader) | structural ads: banners, sidebars, promo blocks | native inserts inside a paragraph — to them that's just article text |
+| Classic ad blockers (uBlock, EasyList) | by URL and CSS selector | text, entirely |
+| Prompt injection guardrails | instructions aimed at the agent | persuasion — grammatically valid but biased content |
 
-adassay работает на уровне абзаца уже после экстракции и добавляет то, чего нет ни у кого:
-детектор скрытых узлов на сыром DOM. Экстрактор выбросит `display:none` молча и потеряет
-самый ценный сигнал страницы — источник намеренно скармливает парсерам то, чего не
-показывает людям. Здесь это не мусор, а вердикт о доверии к домену.
+adassay works at paragraph level after extraction, and adds something nobody else has: a
+hidden-node detector on the raw DOM. An extractor drops `display:none` silently and throws
+away the single most useful signal on the page — the source is deliberately feeding parsers
+what it does not show people. Here that isn't garbage, it's a verdict on whether the domain
+can be trusted.
 
-Три слоя:
+Three layers:
 
-- **L1** — сырой DOM: `display:none`, вынос за экран, `aria-hidden`, `hidden`, комментарии,
-  `noscript`, `template`, текст в цвет фона, длинные атрибуты, невидимый unicode
-  (`invisible_unicode`, теги-невидимки U+E0000). Детерминированный и дешёвый.
-- **L2** — признаки по тексту сегмента: `rel="sponsored"`, промокод рядом с промо-словом,
-  партнёрская ссылка, дисклеймер («на правах рекламы», `#ad`), плотность бренда, CTA
-  вперемешку с дефицитом. Взвешенная сумма даёт скор и вердикт; серая зона уходит дальше.
-- **L3** — скор домена: сколько раз на нём находили скрытые узлы. Сдвигает скоры сегментов,
-  но не решает за них.
+- **L1** — raw DOM: `display:none`, off-screen positioning, `aria-hidden`, `hidden`,
+  comments, `noscript`, `template`, text painted the color of its background, long
+  attributes, invisible unicode (`invisible_unicode`, U+E0000 tag characters). Deterministic
+  and cheap.
+- **L2** — features over the segment text: `rel="sponsored"`, a promo code next to a promo
+  word, affiliate link, disclaimer (`#ad`, «на правах рекламы»), brand density, CTA mixed
+  with scarcity. A weighted sum gives a score and a verdict; the grey zone moves on.
+- **L3** — domain score: how often hidden nodes turned up there. It shifts segment scores,
+  but never decides for them.
 
-Серую зону между порогами при желании разбирает локальная модель через Ollama —
-только текст сегментов, только на вашей машине.
+If you want, a local model behind Ollama handles the grey zone between thresholds — segment
+text only, on your own machine.
 
-Вердикт сегмента: `Keep` (в вывод как есть), `Flag` (остаётся в тексте, обёрнут маркером
-`[[adassay:flag {...}]] … [[/adassay:flag]]` с причинами) или `Drop` (вырезан).
-Пограничное не удаляется молча — агент видит пометку и решает сам.
+A segment ends up as `Keep` (passed through as is), `Flag` (kept in the text, wrapped in a
+`[[adassay:flag {...}]] … [[/adassay:flag]]` marker with the reasons) or `Drop` (cut).
+Borderline content is never removed quietly — the agent sees the mark and decides for itself.
 
-## Установка
+## Install
 
-Нужен Go 1.25 или новее.
+Needs Go 1.25 or newer.
 
 ```sh
 go install adassay.com/cmd/adassay@latest
-go install adassay.com/cmd/adassay-mcp@latest   # MCP-сервер, по желанию
+go install adassay.com/cmd/adassay-mcp@latest   # MCP server, optional
 ```
 
-Разбор серой зоны локальной моделью — по желанию: `ollama pull qwen2.5:7b-instruct`
-(модель и адрес меняются в `judge` в `rules.yaml`). Без Ollama всё работает, серая зона
-просто остаётся `Flag`.
+Grey-zone handling by a local model is optional: `ollama pull qwen2.5:7b-instruct` (model
+and address live under `judge` in `rules.yaml`). Everything works without Ollama, the grey
+zone simply stays `Flag`.
 
-Или из исходников:
+Or from source:
 
 ```sh
 go build ./cmd/adassay
 ```
 
-## Использование
+## Usage
 
 ```sh
-adassay https://example.com/article          # markdown с маркерами
-adassay --json https://example.com/article   # весь Result: сегменты, скоры, находки
-                                              # (`text` — тот же отфильтрованный документ)
-cat page.html | adassay                      # из stdin: ни локальной, ни общей базы
-adassay --verbose https://example.com/a      # плюс список скрытых находок
+adassay https://example.com/article          # markdown with markers
+adassay --json https://example.com/article   # the whole Result: segments, scores, findings
+                                              # (`text` is the same filtered document)
+cat page.html | adassay                      # from stdin: no local and no shared database
+adassay --verbose https://example.com/a      # plus the list of hidden findings
 ```
 
-Код возврата `2` — на странице нашлись скрытые узлы. Документ всё равно напечатан, но
-скрипт или CI-джоб может отказаться от такого источника.
+Exit code `2` means hidden nodes were found on the page. The document still gets printed,
+but a script or CI job can refuse a source like that.
 
-Голос человека перебивает все слои: он ложится в локальную базу как `human` — следующий
-запуск сразу учитывает исправление — и уезжает в общую базу:
+A human vote overrides every layer. It lands in the local database as `human` — the next run
+picks the correction up straight away — and travels to the shared database:
 
 ```sh
-adassay vote https://example.com/article --ad     # всё, что фильтр не оставил на странице
-adassay vote <sha256-сегмента> --not-ad           # один сегмент по хешу
-adassay vote "точный текст абзаца" --ad           # то же, хеш считается на месте
+adassay vote https://example.com/article --ad     # everything the filter left on the page
+adassay vote <segment-sha256> --not-ad            # a single segment by hash
+adassay vote "exact paragraph text" --ad          # same thing, the hash is computed on the spot
 ```
 
-Аргумент, не являющийся 64-символьным hex и не начинающийся с `http://` или `https://`,
-считается текстом сегмента: голос уйдёт за хеш этой строки, а не за страницу. Свои флаги
-у `vote`: `--share` (адрес общей базы поверх `$ADASSAY_SHARE_URL`), `--db` и `--config`.
+An argument that isn't 64 hex characters and doesn't start with `http://` or `https://` is
+treated as segment text: the vote goes against that string's hash, not against the page.
+`vote` has its own flags: `--share` (shared database address, overrides `$ADASSAY_SHARE_URL`),
+`--db` and `--config`.
 
-Голос по url прогоняет страницу тем же пайплайном, что и обычный запуск, — с локальной
-базой, общей базой и судьёй. Иначе на бюллетень попадали бы только вердикты правил, а
-исправлять человеку приходится как раз то, что правила сами не выводят: чужой `Drop` из
-общей базы, решение судьи, сдвиг от недоверия к домену.
+Voting by URL runs the page through the same pipeline as a normal run — local database,
+shared database and judge included. Otherwise only rule verdicts would reach the ballot,
+and what a human actually needs to correct is precisely what the rules don't produce on
+their own: someone else's `Drop` from the shared database, a judge decision, a nudge from
+domain distrust.
 
-Флаги `adassay`: `--config` (свой `rules.yaml`), `--db` (путь к локальной базе),
-`--no-share` (ничего не отправлять), `--json`, `--verbose`.
+`adassay` flags: `--config` (your own `rules.yaml`), `--db` (path to the local database),
+`--no-share` (send nothing), `--json`, `--verbose`.
 
-Подбор порогов по размеченному корпусу — `adassay calibrate` (`--corpus`, по умолчанию
-`testdata/corpus`; `--config`; `--dump` — печать всех сегментов с вердиктами, из неё
-пишется разметка). Разметка лежит в `labels.yaml`: у каждой страницы `file`, `url`,
-`hidden` и список `ads` — не id сегментов, а тексты; метка короче 40 символов должна
-совпасть с сегментом целиком, длиннее — по префиксу. Метка, не совпавшая ни с чем, роняет
-прогон: молча усохшая разметка улучшила бы все метрики разом.
+To tune thresholds against a labelled corpus use `adassay calibrate` (`--corpus`, defaults
+to `testdata/corpus`; `--config`; `--dump` prints every segment with its verdict, which is
+where labels come from). Labels live in `labels.yaml`: each page has `file`, `url`, `hidden`
+and a list of `ads` — texts rather than segment ids. A label under 40 characters must match
+a segment exactly, anything longer matches by prefix. A label that matches nothing fails the
+run: labels quietly shrinking would improve every metric at once.
 
-Как MCP-сервер отдаёт два инструмента: `fetch_clean` (скачать страницу и вернуть
-очищенный контент) и `check_text` (проверить уже имеющийся текст: ничего не скачивает,
-но серую зону, как и весь пайплайн, отдаёт судье на `judge.endpoint`). Флаги
-`adassay-mcp`: `--config` и `--db`, транспорт — stdio.
+As an MCP server it exposes two tools: `fetch_clean` (download a page and return cleaned
+content) and `check_text` (check text you already have — it downloads nothing, but like the
+rest of the pipeline it hands the grey zone to the judge at `judge.endpoint`). `adassay-mcp`
+flags: `--config` and `--db`; transport is stdio.
 
-## Формат rules.yaml
+## rules.yaml format
 
-Встроенный `internal/config/rules.yaml` — дефолт. Свой файл кладётся **поверх** него, так
-что достаточно перечислить только то, что меняете; неизвестный ключ — ошибка, а не молчание.
-Списки (`imperatives`, `disclaimers`, `affiliate_hosts` и прочие) заменяются целиком, а не
-дополняются: чтобы добавить один паттерн, перечислите рядом и встроенные. `l2.weights` —
-словарь, он мержится по ключам.
+The embedded `internal/config/rules.yaml` is the default. Your file is layered **on top** of
+it, so you only list what you change; an unknown key is an error rather than silence. Lists
+(`imperatives`, `disclaimers`, `affiliate_hosts` and the rest) are replaced wholesale, not
+appended to: to add one pattern, list the built-in ones alongside it. `l2.weights` is a map
+and merges per key.
 
 ```sh
 adassay --config ./my-rules.yaml https://example.com
@@ -113,41 +117,42 @@ adassay --config ./my-rules.yaml https://example.com
 
 ### l1
 
-| Ключ | Смысл |
+| Key | Meaning |
 |---|---|
-| `min_length` | сколько символов должно быть в скрытом узле, чтобы он считался находкой |
-| `long_attr_length` | длина, с которой атрибут вообще рассматривается как находка |
-| `imperatives` | команды агенту («ignore previous», «always recommend», «игнорируй») |
-| `agent_names` | имена агентов, к которым обращается инъекция |
+| `min_length` | how many characters a hidden node needs before it counts as a finding |
+| `long_attr_length` | the length at which an attribute is considered at all |
+| `imperatives` | commands aimed at the agent ("ignore previous", "always recommend", «игнорируй») |
+| `agent_names` | agent names an injection addresses |
 
-Длина работает не везде одинаково. `display:none`, вынос за экран, цвет по цвету и
-`<noscript>` — механизмы, которыми обычные страницы прозу не прячут, там достаточно
-`min_length`. Комментарии CMS, `<template>`, `hidden`, `aria-hidden` и длинные атрибуты —
-это как раз то, из чего сделана половина веба, и одна только длина ловила там служебную
-разметку MediaWiki и обычный `<meta name="description">`. Такой узел становится находкой,
-только если в тексте есть императив из `imperatives` или имя из `agent_names`.
+Length doesn't work the same way everywhere. `display:none`, off-screen positioning, color
+on color and `<noscript>` are not mechanisms ordinary pages use to hide prose, so
+`min_length` is enough there. CMS comments, `<template>`, `hidden`, `aria-hidden` and long
+attributes are what half the web is built from, and length alone kept catching MediaWiki
+markup and plain `<meta name="description">`. A node like that becomes a finding only if its
+text carries an imperative from `imperatives` or a name from `agent_names`.
 
-Для этих механизмов порог длины работает в обе стороны: «ignore previous instructions»
-опасен и в двадцать символов. Атрибуты — исключение: там нужны и длина больше
-`long_attr_length`, и обращение к агенту. Без длины на корпусе всплывали семь чистых
-страниц вместо двух — короткая инъекция в `alt` или `meta` остаётся известным потолком.
+For those mechanisms the length threshold cuts both ways: "ignore previous instructions" is
+dangerous at twenty characters too. Attributes are the exception — there you need both
+length above `long_attr_length` and something addressed to an agent. Without the length
+requirement seven clean pages surfaced on the corpus instead of two, so a short injection in
+`alt` or `meta` remains a known ceiling.
 
 ### l2
 
-| Ключ | Смысл |
+| Key | Meaning |
 |---|---|
-| `hi` | скор строго выше `hi` → `Drop` |
-| `lo` | скор строго ниже `lo` → `Keep`; между ними, включая сами `lo` и `hi`, — серая зона, `Flag` или judge |
-| `bias` | свободный член логистической суммы; чем ниже, тем осторожнее фильтр |
-| `weights` | вес каждого признака, неотрицательный |
-| `shortcuts` | комбинация признаков, срабатывающая мимо суммы |
-| `patterns` | словари, по которым признаки детектятся |
+| `hi` | a score strictly above `hi` → `Drop` |
+| `lo` | a score strictly below `lo` → `Keep`; anything between, `lo` and `hi` included, is the grey zone — `Flag` or judge |
+| `bias` | intercept of the logistic sum; the lower it is, the more cautious the filter |
+| `weights` | weight of each feature, non-negative |
+| `shortcuts` | feature combinations that fire past the sum |
+| `patterns` | the word lists features are detected against |
 
-Признаки фиксированы кодом: `rel_sponsored`, `promo_code`, `affiliate_link`, `disclaimer`,
-`brand_density`, `cta_urgency`. Вес обязателен для каждого — отсутствующий молча считался
-бы нулём, поэтому это ошибка загрузки. Вес неизвестного признака — тоже ошибка.
+Features are fixed in code: `rel_sponsored`, `promo_code`, `affiliate_link`, `disclaimer`,
+`brand_density`, `cta_urgency`. Every one of them needs a weight — a missing weight would
+silently count as zero, so it fails to load. A weight for an unknown feature fails too.
 
-Шорткат — это «если сработали все перечисленные признаки, вердикт такой, сумму не считаем»:
+A shortcut says "if all these features fired, this is the verdict, skip the sum":
 
 ```yaml
 l2:
@@ -156,149 +161,148 @@ l2:
       verdict: drop
 ```
 
-Словари в `patterns` (`promo_words`, `disclaimers`, `affiliate_params`, `affiliate_hosts`,
-`cta_words`, `urgency_words`) — просто списки подстрок, регистр не важен, совпадение по
-границам слова: `#ad` не сработает на `#adassay`, «реклама» — на «рекламация». Ни один
-список не может быть пустым.
+The lists under `patterns` (`promo_words`, `disclaimers`, `affiliate_params`,
+`affiliate_hosts`, `cta_words`, `urgency_words`) are plain substring lists, case-insensitive,
+matched on word boundaries: `#ad` won't fire on `#adassay`, «реклама» won't fire on
+«рекламация». No list may be empty.
 
 ### l3
 
-| Ключ | Смысл |
+| Key | Meaning |
 |---|---|
-| `min_visits` | сколько визитов на домен нужно, прежде чем его репутация что-то значит |
-| `half_life_days` | период полураспада старых находок |
-| `finding_penalty` | вклад одной находки в недоверие |
-| `max_shift` | максимальная добавка к скору сегмента при полном недоверии (0..1) |
+| `min_visits` | how many visits a domain needs before its reputation means anything |
+| `half_life_days` | half-life of old findings |
+| `finding_penalty` | how much one finding adds to distrust |
+| `max_shift` | largest addition to a segment score at full distrust (0..1) |
 
 ### judge
 
-`endpoint`, `model`, `timeout`, `batch_size` — локальная Ollama для серой зоны. Модель
-недоступна или молчит — сегмент остаётся `Flag`: маркер честнее догадки.
+`endpoint`, `model`, `timeout`, `batch_size` — the local Ollama for the grey zone. If the
+model is unreachable or silent the segment stays `Flag`: a marker is more honest than a guess.
 
-## Приватность
+## Privacy
 
-**Локально.** Вердикты и счётчики доменов лежат в sqlite: `$ADASSAY_DB` или
-`adassay/verdicts.db` в кэше пользователя (`~/.cache` на Linux, `~/Library/Caches` на macOS). Ни текста сегментов, ни
-доменов в открытом виде в файле нет — только sha256 нормализованного текста. Кто получил
-базу, не узнает, что вы читали.
+**Locally.** Verdicts and per-domain counters live in sqlite: `$ADASSAY_DB`, or
+`adassay/verdicts.db` in the user cache (`~/.cache` on Linux, `~/Library/Caches` on macOS).
+Neither segment text nor domains appear in the file in the clear — only the sha256 of
+normalized text. Whoever gets hold of the database learns nothing about what you read.
 
-**Чтение общей базы.** Работает, только если задан `ADASSAY_SHARE_URL`; без него клиента
-нет вообще и наружу не уходит ничего. Запрос k-анонимный: уезжают первые 4 hex-символа
-хеша (65536 бакетов), сервер возвращает весь бакет, полный хеш сопоставляется у вас.
-Ответ меньше 8 записей клиент отвергает — бакет из одной записи не анонимность, а прямое
-указание на сегмент. Идентификатор установки при чтении не передаётся.
+**Reading the shared database.** This only happens when `ADASSAY_SHARE_URL` is set; without
+it there is no client at all and nothing leaves the machine. The request is k-anonymous: the
+first 4 hex characters of the hash go out (65536 buckets), the server returns the whole
+bucket, and the full hash is matched locally. The client rejects a response with fewer than
+8 records — a bucket of one isn't anonymity, it points straight at the segment. No install
+identifier is sent when reading.
 
-**Запись.** Уходят только уверенные вердикты — `Drop`-сегменты и находки L1 — и только
-как хеш, вердикт, список причин и источник. Текста нет ни в запросе, ни в базе сервера;
-тело запроса не логируется. Серая зона (`Flag`) не отправляется никогда: это открытый
-вопрос, и отправка сдала бы страницу, ничего не добавив базе. Не отправляется и `Drop`,
-который поднял скор домена (`domain_distrust`): это утверждение о репутации домена
-у вас, а не о тексте, и в общей базе оно осудило бы слова, набравшие на других сайтах
-серую зону. Отправка идёт партиями с
-диска — не раньше чем через 6 часов и не меньше 20 записей, чтобы поток не превращался в
-трансляцию вашей сессии чтения. К записи прилагается случайный идентификатор установки
-(файл `adassay/client_id` в каталоге конфигурации пользователя) — сервер взвешивает по нему
-вклад и ограничивает спам.
+**Writing.** Only confident verdicts go out — `Drop` segments and L1 findings — and only as
+a hash, a verdict, a list of reasons and a source. There is no text in the request or in the
+server database, and the request body isn't logged. The grey zone (`Flag`) is never sent:
+it's an open question, and sending it would give away the page while adding nothing. Neither
+is a `Drop` that came from domain distrust (`domain_distrust`): that's a claim about the
+domain's reputation as seen by you, not about the text, and in the shared database it would
+condemn wording that landed in the grey zone on other sites. Sending happens in batches off
+disk — no sooner than 6 hours and no fewer than 20 records, so the stream doesn't turn into a
+broadcast of your reading session. Writes carry a random install identifier (the file
+`adassay/client_id` in the user config directory), which the server uses to weigh
+contributions and throttle spam.
 
-**Как выключить.** `--no-share` или `ADASSAY_NO_SHARE=1` — отправка выключена целиком,
-чтение остаётся. Не задавать `ADASSAY_SHARE_URL` — общей базы нет ни на чтение, ни на
-запись. Удалить `client_id` можно в любой момент, но вместе с ним обнулится и репутация
-установки. Запуск из stdin без `--db` не открывает локальную базу и не спрашивает общую —
-единственное, что он может тронуть по сети, это ваша же локальная Ollama, если серая зона
-непуста. MCP-сервер общей базы не касается вообще: он читает и пишет только локальный кэш.
+**Turning it off.** `--no-share` or `ADASSAY_NO_SHARE=1` disables sending entirely while
+reading still works. Leaving `ADASSAY_SHARE_URL` unset means no shared database at all, for
+reading or writing. You can delete `client_id` at any time, but the install's reputation goes
+with it. A run from stdin without `--db` opens no local database and asks nothing of the
+shared one — the only thing it can touch over the network is your own Ollama, and only if the
+grey zone isn't empty. The MCP server never touches the shared database: it reads and writes
+the local cache only.
 
-## Известные потолки
+## Known ceilings
 
-- **Внешние CSS не видны.** L1 читает inline-стили и атрибуты сырого DOM. Класс, спрятанный
-  правилом в подключённом `.css`, не детектится: тянуть и парсить таблицы стилей — другой
-  порядок сложности и другой профиль риска.
-- **Консенсус не ловит систематическую ошибку.** Общая база усредняет клиентов, а клиенты
-  запускают одни и те же правила. Если правила ошибаются одинаково, голосование это
-  зафиксирует, а не исправит. Противовес один — человеческие голоса (`adassay vote`),
-  они перебивают всё остальное, включая друг друга, иначе первый же ошибочный запирал бы
-  хеш навсегда. В общей базе такая замена стоит кворума голосов; локально голос действует
-  сразу.
-- **Находки L1 уезжают в базу, но оттуда не читаются.** Их хеш считается в отдельном
-  пространстве (`hidden/<kind>`): сэмпл находки — часто обычная проза страницы, а L1
-  срабатывает и на чистых страницах, так что общий с сегментами адрес публиковал бы
-  `Drop` на честный абзац. Клиент это пространство не запрашивает — сигнал лежит для
-  серверной агрегации, пока её нет.
-- **Ответ на бакет обрезан сверху.** Сервер отдаёт не больше 1024 вердиктов на префикс:
-  чтение неаутентифицировано, а число хешей под префиксом ничем не ограничено, так что без
-  потолка один GET заставлял бы сервер собрать в память весь бакет. Обрезка идёт по порядку
-  хеша, поэтому набор стабилен между запросами, но сегмент из переполненного бакета
-  общая база клиенту не отдаст — он решается локально.
-- **Приватность записи слабее приватности чтения.** Чтение k-анонимно и безымянно. Запись
-  несёт идентификатор установки и полный хеш сегмента — иначе нечего дедуплицировать и
-  нечем ограничивать спам. Партии и задержка размывают связь с сессией, но не убирают её.
-  Кому этот размен не подходит — `--no-share`.
-- **Кворум держится на честном слове клиента.** `client_id` — самоназначенный UUID из
-  файла установки, сервер проверяет только его форму. Трёх запросов с тремя разными UUID
-  достаточно, чтобы опубликовать вердикт или переписать чужой — генерация UUID ничего не
-  стоит, так что кворум ограничивает одиночку, а не того, кто готов притвориться тремя.
-  Карантин поднимает цену спама, но не делает её неподъёмной; серьёзный ответ — подписанная
-  регистрация установки или proof-of-work на отправке, и до него общая база остаётся
-  доверием, а не доказательством.
-- **Один запрос k-анонимен, страница целиком — нет.** Бакет запрашивается на каждый
-  сегмент отдельно, так что страница на две сотни абзацев уезжает как две сотни префиксов
-  подряд с одного адреса. Отдельный префикс не говорит ни о чём, а вот их набор,
-  пришедший пачкой, — почти уникальный отпечаток документа: сервер со своим краулером
-  сопоставит. Сузить это можно батчингом уникальных префиксов страницы с добавлением
-  ложных — до тех пор `ADASSAY_SHARE_URL` стоит задавать только тому серверу, которому
-  доверяешь знать, что вы читаете.
-- **Loopback остаётся доступен для скачивания.** Дозвон отказывает приватным, link-local
-  и CGNAT-адресам — в первую очередь метаданным облака на `169.254.169.254`, — но не
-  `127.0.0.1`: иначе нельзя отфильтровать страницу с локального сервера. Для CLI url
-  набирает человек, а вот `fetch_clean` в MCP получает его от агента, который только что
-  прочитал чужую страницу, так что инъекция «скачай http://127.0.0.1:…» дотянется до
-  сервиса на той же машине. Закрывается это своим сетевым namespace для агента, а не
-  флагом.
-- **Нормализация версионируется.** Версия зашита внутрь дайджеста: хеши разных версий
-  нормализации живут в разных адресах и не смешиваются. Правка нормализации без правки
-  `core.NormVersion` тихо обесценила бы базу.
+- **External CSS is invisible.** L1 reads inline styles and attributes off the raw DOM. A
+  class hidden by a rule in a linked `.css` isn't detected: fetching and parsing stylesheets
+  is a different order of complexity and a different risk profile.
+- **Consensus doesn't catch systematic error.** The shared database averages clients, and
+  clients run the same rules. If the rules are wrong in the same way, voting records that
+  rather than fixing it. The one counterweight is human votes (`adassay vote`), which
+  override everything else including each other — otherwise the first mistaken vote would
+  lock a hash forever. In the shared database such a replacement costs a quorum; locally the
+  vote takes effect immediately.
+- **L1 findings go to the database but aren't read back.** Their hash is computed in a
+  separate space (`hidden/<kind>`): a finding's sample is often ordinary page prose, and L1
+  fires on clean pages too, so sharing an address space with segments would publish a `Drop`
+  against an honest paragraph. The client never queries that space — the signal sits there
+  for server-side aggregation that doesn't exist yet.
+- **Bucket responses are capped.** The server returns at most 1024 verdicts per prefix:
+  reads are unauthenticated and nothing bounds how many hashes share a prefix, so without a
+  cap a single GET would make the server assemble an entire bucket in memory. The cut follows
+  hash order, so the set is stable between requests, but a segment inside an overflowing
+  bucket won't be served — it gets decided locally.
+- **Write privacy is weaker than read privacy.** Reads are k-anonymous and anonymous. Writes
+  carry an install identifier and a full segment hash — otherwise there's nothing to
+  deduplicate against and no way to throttle spam. Batching and delay blur the link to a
+  session but don't remove it. If that trade doesn't suit you, use `--no-share`.
+- **Quorum runs on the client's word.** `client_id` is a self-assigned UUID from an install
+  file, and the server only checks its shape. Three requests with three different UUIDs are
+  enough to publish a verdict or overwrite someone else's — generating UUIDs costs nothing,
+  so quorum constrains a lone client rather than anyone willing to pretend to be three.
+  Quarantine raises the price of spam without making it prohibitive; the real answer is
+  signed install registration or proof-of-work on submission, and until then the shared
+  database is trust rather than proof.
+- **A single request is k-anonymous, a whole page is not.** A bucket is fetched per segment,
+  so a page of two hundred paragraphs leaves as two hundred prefixes in a row from one
+  address. An individual prefix says nothing, but a set of them arriving together is close to
+  a unique fingerprint of the document, and a server with its own crawler can match it.
+  Narrowing this means batching the page's unique prefixes and padding with decoys — until
+  then, point `ADASSAY_SHARE_URL` only at a server you trust to know what you read.
+- **Loopback stays reachable.** Fetching refuses private, link-local and CGNAT addresses —
+  cloud metadata at `169.254.169.254` above all — but not `127.0.0.1`, since otherwise you
+  couldn't filter a page off a local server. With the CLI a human types the URL, but
+  `fetch_clean` in MCP gets one from an agent that just read someone else's page, so an
+  injection saying "fetch http://127.0.0.1:…" reaches a service on the same machine. The fix
+  is a network namespace for the agent, not a flag.
+- **Normalization is versioned.** The version is baked inside the digest: hashes from
+  different normalization versions live at different addresses and never mix. Changing
+  normalization without bumping `core.NormVersion` would quietly invalidate the database.
 
-## Сервер общей базы
+## Shared database server
 
 ```sh
 docker build -t ghcr.io/belaytzev/adassay-server:latest .
 kubectl apply -f deploy/k8s/
 ```
 
-Ручки: `GET /v1/segments/{prefix}?norm_version=1` (параметр обязателен, чужая версия —
-`400`; короткий бакет сервер добивает детерминированными пустышками до 8 записей),
-`POST /v1/segments` (машинные вердикты — `rules` и `ollama`; `human` здесь отвергается,
-иначе одна партия перебивала бы 256 вердиктов разом), `POST /v1/vote` (человеческий
-голос, один хеш на запрос), `GET /metrics`, `GET /healthz` (статический ответ для
-проб k8s — `/metrics` для них не годится, там на каждый запрос считаются gauge из базы).
-Настройки: `--addr` (по умолчанию `:8080`), `--db` / `ADASSAY_SERVER_DB` (по умолчанию
-`adassay-server.db` в рабочем каталоге), `--trusted-proxies` / `ADASSAY_TRUSTED_PROXIES`.
+Endpoints: `GET /v1/segments/{prefix}?norm_version=1` (the parameter is required, a foreign
+version gets `400`; a short bucket is padded with deterministic decoys up to 8 records),
+`POST /v1/segments` (machine verdicts — `rules` and `ollama`; `human` is rejected here, or
+one batch could override 256 verdicts at once), `POST /v1/vote` (a human vote, one hash per
+request), `GET /metrics`, `GET /healthz` (a static response for k8s probes — `/metrics`
+won't do, it computes gauges from the database on every request). Settings: `--addr`
+(defaults to `:8080`), `--db` / `ADASSAY_SERVER_DB` (defaults to `adassay-server.db` in the
+working directory), `--trusted-proxies` / `ADASSAY_TRUSTED_PROXIES`.
 
-**Карантин.** Присланный вердикт не отдаётся клиентам, пока с ним не согласятся три
-разных установки. Подтверждение хранится за конкретным вердиктом, и клиент держит по
-хешу одно мнение: несогласие переносит его голос, а не добавляет второй. Претендент на
-смену опубликованного вердикта тоже набирает свой кворум — до этого он лежит в карантине,
-а клиенты продолжают получать прежний ответ. Ранг источника (`rules` < `ollama` < `human`)
-закрывает от более слабого источника только опубликованный вердикт: неподтверждённую
-запись забирает любой кворум, иначе хеш, который никто больше не видел, навсегда достался
-бы тому, кто первым назвал источник посильнее. Согласие с уже записанным вердиктом
-добавляет подтверждение и не переписывает его источник: иначе один клиент присвоил бы
-чужой строке ранг и отбивал бы им все честные исправления. Поэтому отправленное не появляется в выдаче
-сразу, один клиент, повторяющий себя или заливающий тысячи хешей, не публикует ничего —
-и не снимает с публикации ничего чужого.
+**Quarantine.** A submitted verdict isn't served to clients until three different installs
+agree with it. Agreement is recorded against a specific verdict, and a client holds one
+opinion per hash: disagreeing moves its vote rather than adding a second. A challenger
+trying to replace a published verdict gathers its own quorum — until then it sits in
+quarantine and clients keep getting the previous answer. Source rank (`rules` < `ollama` <
+`human`) protects only a published verdict from a weaker source: an unconfirmed record can
+be taken by any quorum, or a hash nobody else ever saw would belong forever to whoever
+claimed the strongest source first. Agreeing with an already stored verdict adds a
+confirmation without rewriting its source, otherwise one client could claim someone else's
+string and use that rank to fend off honest corrections. So a submission doesn't show up in
+results immediately, and one client repeating itself or dumping thousands of hashes
+publishes nothing — and unpublishes nothing of anyone else's.
 
-**Лимиты записи.** 1 вердикт в секунду с адреса, burst 256 — ровно одна полная партия;
-батч тратит токен за каждую запись, а не за запрос. Свыше — `429` с `Retry-After`.
-Тело запроса до 1 MiB, батч от 1 до 256 записей, причина — до 48 символов из
-`[a-z0-9_-]` (свободный текст в причинах не принимается: это единственное поле, широкое
-достаточно, чтобы протащить текст статьи в базу, которая текста не хранит).
+**Write limits.** 1 verdict per second per address, burst 256 — exactly one full batch; a
+batch spends a token per record rather than per request. Above that, `429` with
+`Retry-After`. Request body up to 1 MiB, batches from 1 to 256 records, a reason up to 48
+characters from `[a-z0-9_-]` (free text in reasons is rejected: it's the only field wide
+enough to smuggle article text into a database that stores no text).
 
-**Метрики:** `adassay_requests_total{endpoint}`, `adassay_bucket_hits_total`,
+**Metrics:** `adassay_requests_total{endpoint}`, `adassay_bucket_hits_total`,
 `adassay_submit_divergent_total`, `adassay_verdicts_published`,
-`adassay_verdicts_quarantined`. Счётчики базы обновляются не чаще раза в 30 секунд.
+`adassay_verdicts_quarantined`. Database counters refresh at most once every 30 seconds.
 
-Наружу сервис публикуется через Cloudflare Tunnel, а не прямым пробросом порта:
-Ingress из `deploy/k8s/ingress.yaml` остаётся внутрикластерным, а tunnel-под ходит
-в Service `adassay`. Отсюда же следует настройка `ADASSAY_TRUSTED_PROXIES` —
-в ней перечисляются адреса или CIDR туннеля, чьему заголовку `CF-Connecting-IP`
-сервер верит при подсчёте лимитов записи. Для любого другого пира заголовок
-подконтролен клиенту, поэтому игнорируется.
+The service is published through a Cloudflare Tunnel rather than a direct port forward: the
+Ingress in `deploy/k8s/ingress.yaml` stays cluster-internal and the tunnel pod talks to the
+`adassay` Service. That's also where `ADASSAY_TRUSTED_PROXIES` comes from — it lists the
+tunnel's addresses or CIDRs whose `CF-Connecting-IP` header the server trusts when counting
+write limits. For any other peer that header is client-controlled, so it's ignored.
