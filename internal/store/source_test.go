@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/config"
+	"adassay.com/internal/config"
 )
 
 var l3 = config.L3{MinVisits: 5, HalfLifeDays: 30, FindingPenalty: 0.25, MaxShift: 0.2}

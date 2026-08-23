@@ -6,11 +6,11 @@ package pipeline
 import (
 	"log/slog"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/rules"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/rules"
+	"adassay.com/internal/store"
 )
 
 // ReasonDomain marks a verdict the domain score pushed up, so a Flag raised by

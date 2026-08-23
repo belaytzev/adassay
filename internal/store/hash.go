@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -49,7 +49,7 @@ func HashDomain(domain string) []byte {
 }
 
 func hashVersion(s string, version int) []byte {
-	sum := sha256.Sum256([]byte("adfilter/v" + strconv.Itoa(version) + "\n" + Normalize(s)))
+	sum := sha256.Sum256([]byte("adassay/v" + strconv.Itoa(version) + "\n" + Normalize(s)))
 	return sum[:]
 }
 

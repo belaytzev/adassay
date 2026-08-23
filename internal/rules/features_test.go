@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 func patterns(t *testing.T) config.Patterns {
@@ -58,7 +58,7 @@ func TestPromoCode(t *testing.T) {
 		want bool
 	}{
 		{"use code", "Use code SAVE20 at checkout for 20% off.", true},
-		{"promo code", "Our promo code ADFILTER10 works until Friday.", true},
+		{"promo code", "Our promo code ACME10 works until Friday.", true},
 		{"russian", "Действует промокод ЛЕТО2026 на первый заказ.", true},
 		{"code before the word", "SAVE20 is the discount code you need.", true},
 		{"word without a code", "Enter the discount code you were given at checkout.", false},
@@ -113,7 +113,7 @@ func TestDisclaimer(t *testing.T) {
 		{"paid partnership", "Paid partnership with Acme Cloud.", true},
 		{"russian legal", "На правах рекламы. Компания предлагает тариф.", true},
 		{"russian partner material", "Партнёрский материал подготовлен вместе с Acme.", true},
-		{"hashtag prefix of a longer tag", "Follow us at #adfilter for updates.", false},
+		{"hashtag prefix of a longer tag", "Follow us at #adassay for updates.", false},
 		{"word prefix", "Рекламация была отклонена поставщиком.", false},
 		{"neutral prose", "The team compared three storage engines on the same hardware.", false},
 	}

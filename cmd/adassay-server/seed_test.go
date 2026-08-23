@@ -3,7 +3,7 @@ package main
 import (
 	"strconv"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 // put writes one verdict as already published. It exists for the read tests,

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/config"
+	"adassay.com/internal/config"
 )
 
 func testL1(t *testing.T) config.L1 {

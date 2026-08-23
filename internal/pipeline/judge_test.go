@@ -3,9 +3,9 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/store"
 )
 
 // greyText fires disclaimer alone, which lands exactly on the grey zone with

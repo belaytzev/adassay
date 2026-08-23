@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/store"
 )
 
 // published reports whether the bucket endpoint serves a verdict for hash,

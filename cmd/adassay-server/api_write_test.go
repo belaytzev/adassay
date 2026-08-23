@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/extract"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/share"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/extract"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/share"
+	"adassay.com/internal/store"
 )
 
 const testClient = "6f1c9f4e-2b8a-4c1d-9f3e-0a7b5c2d8e10"
@@ -70,7 +70,7 @@ func stored(t *testing.T, st *Store, hash string) core.BucketEntry {
 
 func TestSubmitStoresBatch(t *testing.T) {
 	st := newTestStore(t)
-	first, second := store.HexHash("Материал подготовлен при поддержке"), store.HexHash("Промокод ADFILTER даёт 20%")
+	first, second := store.HexHash("Материал подготовлен при поддержке"), store.HexHash("Промокод ACME даёт 20%")
 
 	resp := submit(t, st,
 		core.SubmitEntry{Hash: first, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceRules},

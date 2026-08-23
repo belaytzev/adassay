@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 const (

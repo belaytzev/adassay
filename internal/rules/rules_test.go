@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 func l2(t *testing.T) config.L2 {

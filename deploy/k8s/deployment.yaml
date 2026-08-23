@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: adfilter
+  name: adassay
 spec:
   replicas: 1
   # sqlite on a ReadWriteOnce volume and the in-process rate limiter both break
@@ -10,26 +10,26 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: adfilter
+      app: adassay
   template:
     metadata:
       labels:
-        app: adfilter
+        app: adassay
     spec:
       securityContext:
         fsGroup: 65532
       containers:
         - name: server
-          image: ghcr.io/belaytzev/adfilter-server:latest
+          image: ghcr.io/belaytzev/adassay-server:latest
           args: ["-addr=:8080"]
           env:
-            - name: ADFILTER_SERVER_DB
-              value: /data/adfilter-server.db
+            - name: ADASSAY_SERVER_DB
+              value: /data/adassay-server.db
             # Whose CF-Connecting-IP is believed; see ratelimit.go. This is the
             # whole pod CIDR, so any pod in the cluster can set the header and
             # pick its own write-limit bucket. Narrow it to the tunnel pod's
             # address in a cluster that runs workloads you do not control.
-            - name: ADFILTER_TRUSTED_PROXIES
+            - name: ADASSAY_TRUSTED_PROXIES
               value: 10.42.0.0/16
           ports:
             - name: http
@@ -63,4 +63,4 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: adfilter-data
+            claimName: adassay-data

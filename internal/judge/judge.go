@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 // Reason marks a verdict the model decided, so it stays distinguishable from a

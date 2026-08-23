@@ -11,14 +11,14 @@ import (
 	"slices"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/pipeline"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/pipeline"
+	"adassay.com/internal/store"
 )
 
 // EnvOptOut disables submission entirely; the --no-share flag does the same.
-const EnvOptOut = "ADFILTER_NO_SHARE"
+const EnvOptOut = "ADASSAY_NO_SHARE"
 
 const (
 	// FlushAge and FlushMin are both required before anything is sent: a batch

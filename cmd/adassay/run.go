@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/extract"
-	"github.com/belaytzev/adfilter/internal/fetch"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/pipeline"
-	"github.com/belaytzev/adfilter/internal/render"
-	"github.com/belaytzev/adfilter/internal/share"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
+	"adassay.com/internal/extract"
+	"adassay.com/internal/fetch"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/pipeline"
+	"adassay.com/internal/render"
+	"adassay.com/internal/share"
+	"adassay.com/internal/store"
 )
 
 // errInjection makes hidden-text findings visible to a shell: the document is
@@ -31,10 +31,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 	}
 
-	fs := flag.NewFlagSet("adfilter", flag.ContinueOnError)
+	fs := flag.NewFlagSet("adassay", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n       adfilter calibrate [flags]\n       adfilter vote <url|hash|segment text> --ad|--not-ad\n\nWith no url the page is read from stdin.\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adassay [flags] [url]\n       adassay calibrate [flags]\n       adassay vote <url|hash|segment text> --ad|--not-ad\n\nWith no url the page is read from stdin.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	asJSON := fs.Bool("json", false, "print the full Result as JSON instead of markdown")
@@ -47,7 +47,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	if len(rest) > 1 {
-		return fmt.Errorf("adfilter: want at most one url, got %d", len(rest))
+		return fmt.Errorf("adassay: want at most one url, got %d", len(rest))
 	}
 
 	cfg, err := config.Load(*cfgPath)
@@ -105,7 +105,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	if len(res.Hidden) > 0 {
-		return fmt.Errorf("adfilter: %w: %d finding(s)", errInjection, len(res.Hidden))
+		return fmt.Errorf("adassay: %w: %d finding(s)", errInjection, len(res.Hidden))
 	}
 	return nil
 }
@@ -114,7 +114,7 @@ func read(pageURL string, stdin io.Reader) ([]byte, error) {
 	if pageURL == "" {
 		page, err := io.ReadAll(io.LimitReader(stdin, fetch.MaxBody))
 		if err != nil {
-			return nil, fmt.Errorf("adfilter: read stdin: %w", err)
+			return nil, fmt.Errorf("adassay: read stdin: %w", err)
 		}
 		return page, nil
 	}
@@ -129,7 +129,7 @@ func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
 		// The sample is the injection itself. It goes out on one line and
 		// through Defuse, or reporting the find hands the agent the payload.
 		for _, f := range res.Hidden {
-			if _, err := fmt.Fprintf(w, "# adfilter: hidden %s: %s\n", f.Kind, render.Sample(f.Sample)); err != nil {
+			if _, err := fmt.Fprintf(w, "# adassay: hidden %s: %s\n", f.Kind, render.Sample(f.Sample)); err != nil {
 				return err
 			}
 		}

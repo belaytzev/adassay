@@ -12,8 +12,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 const (

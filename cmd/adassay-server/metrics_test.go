@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/store"
 )
 
 // scrape returns the metrics endpoint parsed into name -> value, failing the
@@ -72,13 +72,13 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 
 	got := scrape(t, mux)
 	want := map[string]float64{
-		`adfilter_requests_total{endpoint="submit"}`: 4,
-		`adfilter_requests_total{endpoint="vote"}`:   1,
-		"adfilter_submit_divergent_total":            2,
+		`adassay_requests_total{endpoint="submit"}`: 4,
+		`adassay_requests_total{endpoint="vote"}`:   1,
+		"adassay_submit_divergent_total":            2,
 		// The human vote contradicts known but stands alone, so it is staged
 		// and known keeps being served; unknown is the one row in quarantine.
-		"adfilter_verdicts_published":   1,
-		"adfilter_verdicts_quarantined": 1,
+		"adassay_verdicts_published":   1,
+		"adassay_verdicts_quarantined": 1,
 	}
 	for name, v := range want {
 		if got[name] != v {
@@ -86,11 +86,11 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 		}
 	}
 	// The only bucket asked for holds the quarantined row, so it is a miss.
-	if got[`adfilter_requests_total{endpoint="bucket"}`] < 1 {
-		t.Errorf("bucket requests = %v, want at least one", got[`adfilter_requests_total{endpoint="bucket"}`])
+	if got[`adassay_requests_total{endpoint="bucket"}`] < 1 {
+		t.Errorf("bucket requests = %v, want at least one", got[`adassay_requests_total{endpoint="bucket"}`])
 	}
-	if got["adfilter_bucket_hits_total"] != 0 {
-		t.Errorf("bucket hits = %v, want 0: the prefix read holds nothing published", got["adfilter_bucket_hits_total"])
+	if got["adassay_bucket_hits_total"] != 0 {
+		t.Errorf("bucket hits = %v, want 0: the prefix read holds nothing published", got["adassay_bucket_hits_total"])
 	}
 }
 
@@ -106,10 +106,10 @@ func TestMetricsCountBucketHits(t *testing.T) {
 	get(t, st, bucketPath("0000", core.NormVersion))
 
 	got := scrape(t, mux)
-	if got["adfilter_bucket_hits_total"] != 1 {
-		t.Errorf("bucket hits = %v, want 1", got["adfilter_bucket_hits_total"])
+	if got["adassay_bucket_hits_total"] != 1 {
+		t.Errorf("bucket hits = %v, want 1", got["adassay_bucket_hits_total"])
 	}
-	if got[`adfilter_requests_total{endpoint="bucket"}`] != 2 {
-		t.Errorf("bucket requests = %v, want 2", got[`adfilter_requests_total{endpoint="bucket"}`])
+	if got[`adassay_requests_total{endpoint="bucket"}`] != 2 {
+		t.Errorf("bucket requests = %v, want 2", got[`adassay_requests_total{endpoint="bucket"}`])
 	}
 }

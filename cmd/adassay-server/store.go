@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 	_ "modernc.org/sqlite"
 )
 

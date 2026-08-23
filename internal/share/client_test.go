@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/store"
 )
 
 const segment = "Sponsored: our favourite grinder of the year, on sale this week."

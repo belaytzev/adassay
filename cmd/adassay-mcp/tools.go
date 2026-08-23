@@ -7,13 +7,13 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/extract"
-	"github.com/belaytzev/adfilter/internal/fetch"
-	"github.com/belaytzev/adfilter/internal/pipeline"
-	"github.com/belaytzev/adfilter/internal/render"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
+	"adassay.com/internal/extract"
+	"adassay.com/internal/fetch"
+	"adassay.com/internal/pipeline"
+	"adassay.com/internal/render"
+	"adassay.com/internal/store"
 )
 
 const version = "0.1.0"
@@ -47,7 +47,7 @@ type server struct {
 }
 
 func newServer(s *server) *mcp.Server {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "adfilter", Version: version}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "adassay", Version: version}, nil)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "fetch_clean",
 		Description: "Fetch a web page and return its main content with advertising and marketing inserts removed, plus what was found on the way.",
@@ -61,7 +61,7 @@ func newServer(s *server) *mcp.Server {
 
 func (s *server) fetchClean(_ context.Context, _ *mcp.CallToolRequest, in urlArgs) (*mcp.CallToolResult, report, error) {
 	if strings.TrimSpace(in.URL) == "" {
-		return nil, report{}, fmt.Errorf("adfilter: url is empty")
+		return nil, report{}, fmt.Errorf("adassay: url is empty")
 	}
 	page, err := fetch.Get(in.URL)
 	if err != nil {

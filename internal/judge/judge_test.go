@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 func segs(ids ...string) []core.Segment {

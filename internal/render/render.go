@@ -7,15 +7,15 @@ import (
 	"io"
 	"strings"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 // Marker delimiters. The agent must be able to tell a filter decision from the
 // page's own text, so the marker is a sequence no prose produces by accident.
 const (
-	markerOpen  = "[[adfilter:flag "
+	markerOpen  = "[[adassay:flag "
 	markerClose = "]]"
-	markerEnd   = "[[/adfilter:flag]]"
+	markerEnd   = "[[/adassay:flag]]"
 )
 
 // Markdown assembles the visible document: Keep passes through, Drop is cut,
@@ -40,11 +40,11 @@ func Markdown(r core.Result) string {
 // the whole point of the markers is that only the filter can write them.
 // Anything printed alongside the document goes through here too.
 // Each token is broken on its own rather than by splitting every "[[": that
-// pass leaves "[[[adfilter:" a live marker, because replacement is
+// pass leaves "[[[adassay:" a live marker, because replacement is
 // non-overlapping and the third bracket re-pairs with the one it wrote.
 func Defuse(text string) string {
-	text = strings.ReplaceAll(text, "[[adfilter:", "[ [adfilter:")
-	return strings.ReplaceAll(text, "[[/adfilter:", "[ [/adfilter:")
+	text = strings.ReplaceAll(text, "[[adassay:", "[ [adassay:")
+	return strings.ReplaceAll(text, "[[/adassay:", "[ [/adassay:")
 }
 
 // Sample prepares page-controlled text for printing beside the document: one

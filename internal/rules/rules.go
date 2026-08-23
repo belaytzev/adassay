@@ -3,8 +3,8 @@ package rules
 import (
 	"math"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 // Apply runs L2 over a segment: detect the deterministic features, score them

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 const hexDigits = "0123456789abcdef"
@@ -95,7 +95,7 @@ func pad(prefix string, entries []core.BucketEntry) []core.BucketEntry {
 		real[e.Hash] = true
 	}
 	for i := 0; len(entries) < core.MinBucket; i++ {
-		sum := sha256.Sum256([]byte("adfilter/decoy/" + prefix + "/" + strconv.Itoa(i)))
+		sum := sha256.Sum256([]byte("adassay/decoy/" + prefix + "/" + strconv.Itoa(i)))
 		hash := prefix + hex.EncodeToString(sum[:])[core.PrefixLen:]
 		if real[hash] {
 			continue

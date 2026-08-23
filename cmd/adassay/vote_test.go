@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/share"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/share"
+	"adassay.com/internal/store"
 )
 
 func TestVoteSendsHashOfText(t *testing.T) {
@@ -140,7 +140,7 @@ func TestVoteRejectsAmbiguousFlags(t *testing.T) {
 	}
 }
 
-// The documented form puts the target first: `adfilter vote <text> --ad`. Go's
+// The documented form puts the target first: `adassay vote <text> --ad`. Go's
 // flag package stops at the first non-flag, so without interleaved parsing every
 // flag after the target — the verdict included — would be read as an argument.
 func TestVoteAcceptsFlagsAfterTarget(t *testing.T) {

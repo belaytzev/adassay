@@ -16,7 +16,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 //go:embed rules.yaml

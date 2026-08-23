@@ -6,7 +6,7 @@ import (
 )
 
 // parseFlags accepts flags after positional arguments too. Go's flag package
-// stops at the first non-flag, so `adfilter vote <text> --ad` — the documented
+// stops at the first non-flag, so `adassay vote <text> --ad` — the documented
 // form — would otherwise swallow every flag as an argument. Everything after a
 // literal "--" stays positional.
 func parseFlags(fs *flag.FlagSet, args []string) ([]string, error) {

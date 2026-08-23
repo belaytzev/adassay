@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/config"
+	"adassay.com/internal/config"
 )
 
 // SourceScore is the L3 trust of a domain in 0..1, where 1 is a source with

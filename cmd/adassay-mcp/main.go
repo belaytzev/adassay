@@ -1,4 +1,4 @@
-// Command adfilter-mcp exposes the filter to an agent over the Model Context
+// Command adassay-mcp exposes the filter to an agent over the Model Context
 // Protocol on stdio.
 package main
 
@@ -10,9 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/config"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/store"
 )
 
 func main() {

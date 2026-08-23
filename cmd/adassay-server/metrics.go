@@ -40,23 +40,23 @@ func (m *metrics) handler(st *Store) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-		fmt.Fprintf(w, `# HELP adfilter_requests_total Requests served, by endpoint.
-# TYPE adfilter_requests_total counter
-adfilter_requests_total{endpoint="bucket"} %d
-adfilter_requests_total{endpoint="submit"} %d
-adfilter_requests_total{endpoint="vote"} %d
-# HELP adfilter_bucket_hits_total Bucket lookups that held at least one real verdict.
-# TYPE adfilter_bucket_hits_total counter
-adfilter_bucket_hits_total %d
-# HELP adfilter_submit_divergent_total Submitted verdicts that disagreed with the stored one.
-# TYPE adfilter_submit_divergent_total counter
-adfilter_submit_divergent_total %d
-# HELP adfilter_verdicts_published Verdicts past quarantine and served to clients.
-# TYPE adfilter_verdicts_published gauge
-adfilter_verdicts_published %d
-# HELP adfilter_verdicts_quarantined Verdicts withheld until enough clients confirm them.
-# TYPE adfilter_verdicts_quarantined gauge
-adfilter_verdicts_quarantined %d
+		fmt.Fprintf(w, `# HELP adassay_requests_total Requests served, by endpoint.
+# TYPE adassay_requests_total counter
+adassay_requests_total{endpoint="bucket"} %d
+adassay_requests_total{endpoint="submit"} %d
+adassay_requests_total{endpoint="vote"} %d
+# HELP adassay_bucket_hits_total Bucket lookups that held at least one real verdict.
+# TYPE adassay_bucket_hits_total counter
+adassay_bucket_hits_total %d
+# HELP adassay_submit_divergent_total Submitted verdicts that disagreed with the stored one.
+# TYPE adassay_submit_divergent_total counter
+adassay_submit_divergent_total %d
+# HELP adassay_verdicts_published Verdicts past quarantine and served to clients.
+# TYPE adassay_verdicts_published gauge
+adassay_verdicts_published %d
+# HELP adassay_verdicts_quarantined Verdicts withheld until enough clients confirm them.
+# TYPE adassay_verdicts_quarantined gauge
+adassay_verdicts_quarantined %d
 `,
 			m.bucketReqs.Load(), m.submitReqs.Load(), m.voteReqs.Load(),
 			m.bucketHits.Load(), m.divergent.Load(), published, quarantined)

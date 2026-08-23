@@ -12,10 +12,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/extract"
-	"github.com/belaytzev/adfilter/internal/rules"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
+	"adassay.com/internal/extract"
+	"adassay.com/internal/rules"
 )
 
 const labelsFile = "labels.yaml"
@@ -104,10 +104,10 @@ func (m metrics) f1() float64 {
 }
 
 func calibrate(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("adfilter calibrate", flag.ContinueOnError)
+	fs := flag.NewFlagSet("adassay calibrate", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adfilter calibrate [flags]\n\nScores the labelled corpus on a grid of l2.hi and l2.lo.\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adassay calibrate [flags]\n\nScores the labelled corpus on a grid of l2.hi and l2.lo.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	dir := fs.String("corpus", "testdata/corpus", "directory holding the corpus and "+labelsFile)

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
+	"adassay.com/internal/store"
 )
 
 // adText fires disclaimer + affiliate_link, which is a configured shortcut to

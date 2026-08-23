@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/judge"
-	"github.com/belaytzev/adfilter/internal/pipeline"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/judge"
+	"adassay.com/internal/pipeline"
+	"adassay.com/internal/store"
 )
 
 type fakeSpool struct {

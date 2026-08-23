@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 	_ "modernc.org/sqlite"
 )
 
 // EnvDB overrides the default database location; the --db flag overrides both.
-const EnvDB = "ADFILTER_DB"
+const EnvDB = "ADASSAY_DB"
 
 type Store struct{ db *sql.DB }
 
@@ -49,7 +49,7 @@ func DefaultPath() (string, error) {
 			return "", fmt.Errorf("store: no cache or config directory: %w", err)
 		}
 	}
-	return filepath.Join(dir, "adfilter", "verdicts.db"), nil
+	return filepath.Join(dir, "adassay", "verdicts.db"), nil
 }
 
 // Open creates the file and its directory if needed and migrates the schema.

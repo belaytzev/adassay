@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 // golden pins the hash space of NormVersion 1. These digests are the addresses
@@ -15,10 +15,10 @@ func TestGoldenVectors(t *testing.T) {
 		t.Fatalf("NormVersion is %d: add vectors for it, do not edit the ones below", core.NormVersion)
 	}
 	golden := map[string]string{
-		"Use promo code ADFILTER for 20% off": "6264d3ad096344259913afc5c9f6ee7606786a0d8f58ded7c08615ca4cc60cda",
-		"Партнёрский материал":                "191ca0249f59f0a633e91ac01560051d03bc68789bbfb4b0b081fbb36e3ed0d1",
-		"":         "2ecfadd1b80d67dbb5fa4e99dd9148db67ae80b1afbe79266f7f6b964e6f3669",
-		"habr.com": "bb9e1d5d5779ab373fc705224656829be7db07125f07ca0c99f2cdd56508ee68",
+		"Use promo code ACME for 20% off": "af3ecb19aed1af8d435c679bf1989e28be73cddea544d0eb2dff76f121f9b73d",
+		"Партнёрский материал":            "b6ff88765d509aad7bee8570b6058d15b3bf9fd3a8220e4ee624e560c382ca04",
+		"":         "9ff1979be855c23b41fdabea333f14bd644740f5cff3425f32adfc874f486d82",
+		"habr.com": "490d5498b4bf09de6e1b0c98af234095cff636719c87a2171a527dfa6e3262eb",
 	}
 	for text, want := range golden {
 		if got := HexHash(text); got != want {
@@ -28,17 +28,17 @@ func TestGoldenVectors(t *testing.T) {
 }
 
 func TestNormalizationEquivalence(t *testing.T) {
-	base := "Use promo code ADFILTER for 20% off"
+	base := "Use promo code ACME for 20% off"
 	same := []struct {
 		name string
 		text string
 	}{
-		{"case", "USE PROMO CODE adfilter FOR 20% OFF"},
-		{"whitespace", "  Use   promo\tcode\nADFILTER for  20% off  "},
-		{"nbsp", "Use\u00a0promo code ADFILTER for 20% off"},
-		{"zero width", "Use pro\u200bmo code ADFILTER\ufeff for 20% off"},
-		{"tag characters", "Use promo code\U000E0041 ADFILTER for 20% off"},
-		{"nfkc fullwidth", "Use promo code ＡＤＦＩＬＴＥＲ for ２０% off"},
+		{"case", "USE PROMO CODE acme FOR 20% OFF"},
+		{"whitespace", "  Use   promo\tcode\nACME for  20% off  "},
+		{"nbsp", "Use\u00a0promo code ACME for 20% off"},
+		{"zero width", "Use pro\u200bmo code ACME\ufeff for 20% off"},
+		{"tag characters", "Use promo code\U000E0041 ACME for 20% off"},
+		{"nfkc fullwidth", "Use promo code ＡＣＭＥ for ２０% off"},
 	}
 	want := HexHash(base)
 	for _, tc := range same {
@@ -50,9 +50,9 @@ func TestNormalizationEquivalence(t *testing.T) {
 
 func TestDifferentTextDiffersInHash(t *testing.T) {
 	texts := []string{
-		"Use promo code ADFILTER for 20% off",
-		"Use promo code ADFILTER for 30% off",
-		"Use promo code ADFILTERX for 20% off",
+		"Use promo code ACME for 20% off",
+		"Use promo code ACME for 30% off",
+		"Use promo code ACMEX for 20% off",
 		"the compiler emits a warning here",
 	}
 	seen := map[string]string{}
@@ -66,7 +66,7 @@ func TestDifferentTextDiffersInHash(t *testing.T) {
 }
 
 func TestNormVersionSplitsBuckets(t *testing.T) {
-	const text = "Use promo code ADFILTER for 20% off"
+	const text = "Use promo code ACME for 20% off"
 	if a, b := hashVersion(text, core.NormVersion), hashVersion(text, core.NormVersion+1); string(a) == string(b) {
 		t.Fatal("a version bump must move the hash, otherwise old and new normalization share a bucket")
 	}

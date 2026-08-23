@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/config"
+	"adassay.com/internal/config"
 )
 
 const corpusDir = "../../testdata/corpus"

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/config"
+	"adassay.com/internal/config"
 )
 
 // filler pads a fragment so readability accepts it as an article.

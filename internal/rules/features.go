@@ -9,8 +9,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 // Detect returns the features a segment fires, in the canonical order of
@@ -188,7 +188,7 @@ func matchesAny(text string, patterns []string) bool {
 
 // bounded is regexp \b applied to both ends of a match: a word character of
 // the pattern may not continue into a word character of the text. Without it
-// "реклама" fires on "рекламация" and "#ad" fires on "#adfilter".
+// "реклама" fires on "рекламация" and "#ad" fires on "#adassay".
 func bounded(s string, i, n int) bool {
 	first, _ := utf8.DecodeRuneInString(s[i:])
 	last, _ := utf8.DecodeLastRuneInString(s[:i+n])

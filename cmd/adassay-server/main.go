@@ -1,4 +1,4 @@
-// Command adfilter-server serves the shared verdict database: clients fetch a
+// Command adassay-server serves the shared verdict database: clients fetch a
 // bucket by hash prefix and never send a full hash, so the server cannot tell
 // which segment was looked up.
 package main
@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	envDB      = "ADFILTER_SERVER_DB"
-	envTrusted = "ADFILTER_TRUSTED_PROXIES"
+	envDB      = "ADASSAY_SERVER_DB"
+	envTrusted = "ADASSAY_TRUSTED_PROXIES"
 )
 
 func main() {
@@ -31,7 +31,7 @@ func main() {
 
 func serve(addr, dbPath, trustedProxies string) error {
 	if dbPath == "" {
-		dbPath = "adfilter-server.db"
+		dbPath = "adassay-server.db"
 	}
 	st, err := openStore(dbPath)
 	if err != nil {
@@ -58,6 +58,6 @@ func serve(addr, dbPath, trustedProxies string) error {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	fmt.Fprintf(os.Stderr, "adfilter-server listening on %s, db %s\n", addr, dbPath)
+	fmt.Fprintf(os.Stderr, "adassay-server listening on %s, db %s\n", addr, dbPath)
 	return srv.ListenAndServe()
 }

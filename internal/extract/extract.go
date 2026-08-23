@@ -10,8 +10,8 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/idna"
 
-	"github.com/belaytzev/adfilter/internal/config"
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 // Extract turns a page into segments. L1 runs on the raw markup at the same

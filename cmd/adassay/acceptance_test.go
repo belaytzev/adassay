@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 const secretSegment = `Materials for this guide were produced in partnership with <a href="https://go.skimresources.com/?id=42">ShieldPath VPN</a>, who paid for placement.`
@@ -98,7 +98,7 @@ func TestAcceptanceFlagKeepsTextDropCutsIt(t *testing.T) {
 	if !strings.Contains(doc, "promo code SHIELD2024") {
 		t.Errorf("flagged text was cut instead of marked:\n%s", doc)
 	}
-	if !strings.Contains(doc, "[[adfilter:flag ") || !strings.Contains(doc, "[[/adfilter:flag]]") {
+	if !strings.Contains(doc, "[[adassay:flag ") || !strings.Contains(doc, "[[/adassay:flag]]") {
 		t.Errorf("flagged text carries no marker:\n%s", doc)
 	}
 	if !strings.Contains(doc, "Kill switches matter") {

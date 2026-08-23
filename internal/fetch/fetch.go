@@ -15,36 +15,36 @@ import (
 
 const (
 	Timeout   = 20 * time.Second
-	UserAgent = "adfilter/0.1 (+https://github.com/belaytzev/adfilter)"
+	UserAgent = "adassay/0.1 (+https://adassay.com)"
 	MaxBody   = 8 << 20
 )
 
 func Get(pageURL string) ([]byte, error) {
 	u, err := url.Parse(pageURL)
 	if err != nil {
-		return nil, fmt.Errorf("adfilter: %w", err)
+		return nil, fmt.Errorf("adassay: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("adfilter: fetch %s: only http and https are fetched", pageURL)
+		return nil, fmt.Errorf("adassay: fetch %s: only http and https are fetched", pageURL)
 	}
 	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("adfilter: %w", err)
+		return nil, fmt.Errorf("adassay: %w", err)
 	}
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("adfilter: fetch: %w", err)
+		return nil, fmt.Errorf("adassay: fetch: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("adfilter: fetch %s: %s", pageURL, resp.Status)
+		return nil, fmt.Errorf("adassay: fetch %s: %s", pageURL, resp.Status)
 	}
 	page, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody))
 	if err != nil {
-		return nil, fmt.Errorf("adfilter: fetch %s: %w", pageURL, err)
+		return nil, fmt.Errorf("adassay: fetch %s: %w", pageURL, err)
 	}
 	return page, nil
 }
@@ -74,7 +74,7 @@ var client = &http.Client{
 			}
 			if ip := addr.Addr().Unmap(); ip.IsPrivate() || cgnat.Contains(ip) ||
 				ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-				return fmt.Errorf("adfilter: refusing to fetch a private address (%s)", ip)
+				return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip)
 			}
 			return nil
 		},

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/share"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/share"
+	"adassay.com/internal/store"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -187,7 +187,7 @@ func TestPrefixLengthMatchesClient(t *testing.T) {
 // The client is checked against the real handler, not against a hand-written
 // fixture: a format the two sides only agree on in tests is not a contract.
 func TestSharedClientAgainstLiveServer(t *testing.T) {
-	const text = "Промокод ADFILTER даёт 20% скидки"
+	const text = "Промокод ACME даёт 20% скидки"
 	st := newTestStore(t)
 	if err := st.put(core.BucketEntry{
 		Hash:    store.HexHash(text),

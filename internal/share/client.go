@@ -18,13 +18,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/belaytzev/adfilter/internal/core"
-	"github.com/belaytzev/adfilter/internal/store"
+	"adassay.com/internal/core"
+	"adassay.com/internal/store"
 )
 
 // EnvEndpoint points the client at a shared database. Unset means no client at
 // all: nothing is looked up and nothing leaves the machine.
-const EnvEndpoint = "ADFILTER_SHARE_URL"
+const EnvEndpoint = "ADASSAY_SHARE_URL"
 
 const (
 	timeout = 5 * time.Second
@@ -74,7 +74,7 @@ func IDPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("share: no config directory: %w", err)
 	}
-	return filepath.Join(dir, "adfilter", "client_id"), nil
+	return filepath.Join(dir, "adassay", "client_id"), nil
 }
 
 // ClientID returns the random identifier of this installation, creating it on

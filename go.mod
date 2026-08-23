@@ -1,4 +1,4 @@
-module github.com/belaytzev/adfilter
+module adassay.com
 
 go 1.25.0
 

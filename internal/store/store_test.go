@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 func open(t *testing.T) *Store {
@@ -172,8 +172,8 @@ func TestVisitCounts(t *testing.T) {
 }
 
 func TestDefaultPathHonoursEnv(t *testing.T) {
-	t.Setenv(EnvDB, "/tmp/adfilter-test.db")
-	if got, err := DefaultPath(); err != nil || got != "/tmp/adfilter-test.db" {
+	t.Setenv(EnvDB, "/tmp/adassay-test.db")
+	if got, err := DefaultPath(); err != nil || got != "/tmp/adassay-test.db" {
 		t.Fatalf("DefaultPath = %q, %v, want the env override", got, err)
 	}
 

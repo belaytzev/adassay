@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/belaytzev/adfilter/internal/core"
+	"adassay.com/internal/core"
 )
 
 func TestEmbeddedDefaultIsValid(t *testing.T) {
