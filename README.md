@@ -94,9 +94,26 @@ domain distrust.
 To tune thresholds against a labelled corpus use `adassay calibrate` (`--corpus`, defaults
 to `testdata/corpus`; `--config`; `--dump` prints every segment with its verdict, which is
 where labels come from). Labels live in `labels.yaml`: each page has `file`, `url`, `hidden`
-and a list of `ads` — texts rather than segment ids. A label under 40 characters must match
-a segment exactly, anything longer matches by prefix. A label that matches nothing fails the
-run: labels quietly shrinking would improve every metric at once.
+and two lists of texts rather than segment ids — `ads` for paragraphs carrying a
+deterministic signal, `native` for advertising by intent that carries none. A label under 40
+characters must match a segment exactly, anything longer matches by prefix. A label that
+matches nothing fails the run: labels quietly shrinking would improve every metric at once.
+
+Calibration reports five numbers, because `Drop` and `Flag` are not the same outcome:
+
+| Metric | Meaning |
+|---|---|
+| `drop_prec` | share of real advertising among everything cut. The only one that must stay at 1.000 — a mistake here deletes a fact silently |
+| `drop_rec` | how much of the marked advertising was cut outright |
+| `caught` | how much of `ads` was cut **or** flagged, i.e. did not pass as fact |
+| `native` | the same for `native` — the class the fuzzy features have yet to reach |
+| `flag_rate` | share of all segments flagged. This is the cost: judge calls and noise in the output |
+
+The best config is picked by rule rather than by a blended score: reject anything with
+`drop_prec` below 1.000, reject anything flagging more than 15% of the page, then take the
+widest `caught`, then the widest `native`, then the least noise. Without the flag-rate cap
+the search degenerates — dropping `lo` below the 0.076 floor a featureless segment scores
+flags 99% of every document, which warns about nothing.
 
 As an MCP server it exposes two tools: `fetch_clean` (download a page and return cleaned
 content) and `check_text` (check text you already have — it downloads nothing, but like the

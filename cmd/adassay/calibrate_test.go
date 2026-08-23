@@ -11,7 +11,7 @@ const corpusDir = "../../testdata/corpus"
 const (
 	minRecall   = 0.55
 	minCoverage = 1.00
-	maxNoise    = 7
+	maxNoise    = 83
 )
 
 const maxHiddenFalsePositives = 2
@@ -85,5 +85,51 @@ func TestMatchesLabel(t *testing.T) {
 				t.Errorf("matchesLabel(%q, %q) = %v, want %v", tt.flat, tt.label, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNativeDropIsNotAMistake(t *testing.T) {
+	ev := evaluation{segments: []scored{
+		{page: "p", id: "s1", score: 0.9, native: true},
+		{page: "p", id: "s2", score: 0.9, ad: true},
+		{page: "p", id: "s3", score: 0.9},
+	}}
+	m := score(ev, 0.55, 0.10)
+	if m.tp != 2 {
+		t.Errorf("tp = %d, want 2: a drop on native is a hit, not a mistake", m.tp)
+	}
+	if m.fp != 1 {
+		t.Errorf("fp = %d, want 1: only the unlabelled drop counts against precision", m.fp)
+	}
+}
+
+func TestFlagOnAdCounts(t *testing.T) {
+	ev := evaluation{segments: []scored{
+		{page: "p", id: "s1", score: 0.30, ad: true},
+		{page: "p", id: "s2", score: 0.30, native: true},
+	}}
+	m := score(ev, 0.55, 0.10)
+	if m.coverage() != 1.0 {
+		t.Errorf("coverage = %.3f, want 1.000: a flagged ad is caught, not missed", m.coverage())
+	}
+	if m.nativeCoverage() != 1.0 {
+		t.Errorf("nativeCoverage = %.3f, want 1.000", m.nativeCoverage())
+	}
+	if m.flags != 2 {
+		t.Errorf("flags = %d, want 2", m.flags)
+	}
+}
+
+func TestBetterRejectsLostFacts(t *testing.T) {
+	lossy := metrics{tp: 9, fp: 1, covered: 10, ads: 10, segments: 100, flags: 5}
+	safe := metrics{tp: 5, fp: 0, covered: 5, ads: 10, segments: 100, flags: 5}
+	if better(lossy, safe) {
+		t.Error("a config that cuts a fact must lose to one that never does, whatever its coverage")
+	}
+
+	noisy := metrics{tp: 10, fp: 0, covered: 10, ads: 10, segments: 100, flags: 99}
+	quiet := metrics{tp: 8, fp: 0, covered: 8, ads: 10, segments: 100, flags: 5}
+	if better(noisy, quiet) {
+		t.Error("flagging almost everything must lose: it warns about nothing")
 	}
 }

@@ -29,6 +29,7 @@ type pageLabel struct {
 	URL    string   `yaml:"url,omitempty"`
 	Hidden bool     `yaml:"hidden,omitempty"`
 	Ads    []string `yaml:"ads,omitempty"`
+	Native []string `yaml:"native,omitempty"`
 }
 
 type scored struct {
@@ -40,7 +41,10 @@ type scored struct {
 	forced   core.Verdict
 	shortcut bool
 	ad       bool
+	native   bool
 }
+
+func (s scored) commercial() bool { return s.ad || s.native }
 
 func (s scored) verdict(l2 config.L2) core.Verdict {
 	if s.shortcut {
@@ -64,6 +68,10 @@ type metrics struct {
 	tp, fp, fn     int
 	ads            int
 	covered, noise int
+	nativeTotal    int
+	nativeCaught   int
+	segments       int
+	flags          int
 }
 
 func (m metrics) coverage() float64 {
@@ -71,6 +79,20 @@ func (m metrics) coverage() float64 {
 		return 0
 	}
 	return float64(m.covered) / float64(m.ads)
+}
+
+func (m metrics) nativeCoverage() float64 {
+	if m.nativeTotal == 0 {
+		return 0
+	}
+	return float64(m.nativeCaught) / float64(m.nativeTotal)
+}
+
+func (m metrics) flagRate() float64 {
+	if m.segments == 0 {
+		return 0
+	}
+	return float64(m.flags) / float64(m.segments)
 }
 
 func (m metrics) precision() float64 {
@@ -85,14 +107,6 @@ func (m metrics) recall() float64 {
 		return 0
 	}
 	return float64(m.tp) / float64(m.tp+m.fn)
-}
-
-func (m metrics) f1() float64 {
-	p, r := m.precision(), m.recall()
-	if p+r == 0 {
-		return 0
-	}
-	return 2 * p * r / (p + r)
 }
 
 func calibrate(args []string, stdout io.Writer) error {
@@ -149,6 +163,7 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 			return ev, fmt.Errorf("calibrate: %s: %w", p.File, err)
 		}
 		matched := make([]bool, len(p.Ads))
+		matchedNative := make([]bool, len(p.Native))
 		doc := rules.NewDoc(res.Segments)
 		for _, seg := range res.Segments {
 			s := scored{page: p.File, id: seg.ID, text: seg.Text}
@@ -162,12 +177,22 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 					s.ad, matched[i] = true, true
 				}
 			}
+			for i, prefix := range p.Native {
+				if matchesLabel(flat, prefix) {
+					s.native, matchedNative[i] = true, true
+				}
+			}
 			ev.segments = append(ev.segments, s)
 		}
 
 		for i, ok := range matched {
 			if !ok {
 				return ev, fmt.Errorf("calibrate: %s: ad label matches no segment: %q", p.File, p.Ads[i])
+			}
+		}
+		for i, ok := range matchedNative {
+			if !ok {
+				return ev, fmt.Errorf("calibrate: %s: native label matches no segment: %q", p.File, p.Native[i])
 			}
 		}
 		ev.pages = append(ev.pages, pageEval{label: p, hidden: len(res.Hidden) > 0})
@@ -189,8 +214,12 @@ func score(ev evaluation, hi, lo float64) metrics {
 	m := metrics{hi: hi, lo: lo}
 	for _, s := range ev.segments {
 		v := s.verdict(l2)
+		m.segments++
+		if v == core.Flag {
+			m.flags++
+		}
 		switch {
-		case v == core.Drop && s.ad:
+		case v == core.Drop && s.commercial():
 			m.tp++
 		case v == core.Drop:
 			m.fp++
@@ -199,6 +228,12 @@ func score(ev evaluation, hi, lo float64) metrics {
 		}
 		if s.ad {
 			m.ads++
+		}
+		if s.native {
+			m.nativeTotal++
+			if v != core.Keep {
+				m.nativeCaught++
+			}
 		}
 		switch {
 		case v == core.Keep:
@@ -233,20 +268,30 @@ func grid(ev evaluation) []metrics {
 
 func round(v float64) float64 { return math.Round(v*100) / 100 }
 
-const MinPrecision = 0.95
+const (
+	MinPrecision = 1.0
+	MaxFlagRate  = 0.15
+)
+
+func better(a, b metrics) bool {
+	if ok, other := a.precision() >= MinPrecision, b.precision() >= MinPrecision; ok != other {
+		return ok
+	}
+	if ok, other := a.flagRate() <= MaxFlagRate, b.flagRate() <= MaxFlagRate; ok != other {
+		return ok
+	}
+	if math.Abs(a.coverage()-b.coverage()) > 1e-9 {
+		return a.coverage() > b.coverage()
+	}
+	if math.Abs(a.nativeCoverage()-b.nativeCoverage()) > 1e-9 {
+		return a.nativeCoverage() > b.nativeCoverage()
+	}
+	return a.noise < b.noise
+}
 
 func safest(ms []metrics) metrics {
 	sorted := append([]metrics(nil), ms...)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		a, b := sorted[i], sorted[j]
-		if ok, other := a.precision() >= MinPrecision, b.precision() >= MinPrecision; ok != other {
-			return ok
-		}
-		if math.Abs(a.coverage()-b.coverage()) > 1e-9 {
-			return a.coverage() > b.coverage()
-		}
-		return a.noise < b.noise
-	})
+	sort.SliceStable(sorted, func(i, j int) bool { return better(sorted[i], sorted[j]) })
 	return sorted[0]
 }
 
@@ -257,10 +302,16 @@ func report(w io.Writer, ev evaluation, l2 config.L2) error {
 			ads++
 		}
 	}
-	fmt.Fprintf(w, "corpus: %d pages, %d segments, %d labelled as advertising\n\n", len(ev.pages), len(ev.segments), ads)
+	native := 0
+	for _, s := range ev.segments {
+		if s.native {
+			native++
+		}
+	}
+	fmt.Fprintf(w, "corpus: %d pages, %d segments, %d marked ads, %d marked native\n\n", len(ev.pages), len(ev.segments), ads, native)
 
 	g := grid(ev)
-	fmt.Fprintln(w, "   hi     lo   precision  recall      f1  coverage  noise")
+	fmt.Fprintln(w, "   hi     lo  drop_prec  drop_rec  caught  native  flag_rate  noise")
 	for _, m := range topBy(g, 15) {
 		printRow(w, m)
 	}
@@ -282,16 +333,22 @@ func report(w io.Writer, ev evaluation, l2 config.L2) error {
 		fmt.Fprintf(w, "\nl1: %d/%d pages agree with the labels\n", len(ev.pages), len(ev.pages))
 	}
 
-	fmt.Fprintln(w, "\nfalse positives:")
+	fmt.Fprintln(w, "\ncut by mistake (a fact was removed):")
 	for _, s := range ev.segments {
-		if !s.ad && s.verdict(l2) == core.Drop {
+		if !s.commercial() && s.verdict(l2) == core.Drop {
 			fmt.Fprintf(w, "  %s %s: %s\n", s.page, s.id, clip(s.text, 90))
 		}
 	}
-	fmt.Fprintln(w, "\nmisses:")
+	fmt.Fprintln(w, "\nmissed entirely (kept as fact):")
 	for _, s := range ev.segments {
-		if s.ad && s.verdict(l2) != core.Drop {
-			fmt.Fprintf(w, "  %s %s [%s %.2f]: %s\n", s.page, s.id, s.verdict(l2), s.score, clip(s.text, 90))
+		if s.commercial() && s.verdict(l2) == core.Keep {
+			fmt.Fprintf(w, "  %s %s [%.2f]: %s\n", s.page, s.id, s.score, clip(s.text, 90))
+		}
+	}
+	fmt.Fprintln(w, "\nflagged, not cut (agent is warned):")
+	for _, s := range ev.segments {
+		if s.commercial() && s.verdict(l2) == core.Flag {
+			fmt.Fprintf(w, "  %s %s [%.2f]: %s\n", s.page, s.id, s.score, clip(s.text, 90))
 		}
 	}
 	return nil
@@ -299,12 +356,7 @@ func report(w io.Writer, ev evaluation, l2 config.L2) error {
 
 func topBy(ms []metrics, n int) []metrics {
 	sorted := append([]metrics(nil), ms...)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		if a, b := sorted[i].f1(), sorted[j].f1(); math.Abs(a-b) > 1e-9 {
-			return a > b
-		}
-		return sorted[i].precision() > sorted[j].precision()
-	})
+	sort.SliceStable(sorted, func(i, j int) bool { return better(sorted[i], sorted[j]) })
 	if len(sorted) > n {
 		sorted = sorted[:n]
 	}
@@ -312,8 +364,8 @@ func topBy(ms []metrics, n int) []metrics {
 }
 
 func printRow(w io.Writer, m metrics) {
-	fmt.Fprintf(w, "%5.2f  %5.2f  %9.3f  %6.3f  %6.3f  %8.3f  %5d\n",
-		m.hi, m.lo, m.precision(), m.recall(), m.f1(), m.coverage(), m.noise)
+	fmt.Fprintf(w, "%5.2f  %5.2f  %9.3f  %8.3f  %6.3f  %6.3f  %9.3f  %5d\n",
+		m.hi, m.lo, m.precision(), m.recall(), m.coverage(), m.nativeCoverage(), m.flagRate(), m.noise)
 }
 
 func dumpSegments(w io.Writer, ev evaluation, l2 config.L2) error {

@@ -24,7 +24,7 @@ l1:
 
 l2:
   hi: 0.55
-  lo: 0.20
+  lo: 0.10
   bias: -2.5
   weights:
     rel_sponsored: 3.0

@@ -10,6 +10,12 @@
 # paragraph exists to inform. Both kinds are present on purpose, because the
 # thresholds have to separate them.
 #
+# native: advertising by intent that carries no deterministic signal at all —
+# product-led prose inside a monetised roundup. Labelled selectively, a handful
+# of representative paragraphs per page: the point is to measure whether the
+# fuzzy features and the judge reach this class, not to enumerate every case.
+# Without it the metrics look perfect on a page that is 98% unfiltered selling.
+#
 # hidden: the page carries text aimed at parsers rather than at readers. Real
 # pages are labelled false even when L1 fires on their boilerplate — those
 # disagreements are the L1 false-positive baseline, not ground truth.
@@ -215,6 +221,13 @@ pages:
       - "Mullvad’s prices are about as straightforward as it gets"
       - "IPVanish is a decent beginner-friendly VPN for anyone se"
       - "Norton, long known for excellence in security products, "
+    native:
+      - "ExpressVPN is CNET’s Editors’ Choice for the best VPN over"
+      - "ExpressVPN cooked up inventive solutions on Lightway and O"
+      - "NordVPN remains the fastest VPN we tested, making it an ex"
+      - "Surfshark is a solid option for anyone looking for a budge"
+      - "Proton VPN is the best free VPN and the only zero-dollar v"
+      - "Bottom Line Proton VPN is the best free VPN and the only z"
   - file: clean_ars_pixel_review.html
     url: https://arstechnica.com/gadgets/2026/08/google-pixel-11-series-review-is-the-magic-fading/
     ads: []
