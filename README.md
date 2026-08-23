@@ -66,7 +66,15 @@ adassay --verbose https://example.com/a      # plus the list of hidden findings
 ```
 
 Exit code `2` means hidden nodes were found on the page. The document still gets printed,
-but a script or CI job can refuse a source like that.
+but a script or CI job can refuse a source like that. Exit code `3` means the site refused
+the request — an HTTP 403, 401, 429 or a Cloudflare challenge — so nothing was fetched at
+all; that is a different thing from a page that came back empty, and the message says which.
+
+Requests go out with an ordinary desktop Chrome `User-Agent` and its usual companions
+(`Accept`, `Accept-Language`, `Upgrade-Insecure-Requests`, the `Sec-Fetch-*` set). Large
+publishers reject anything else outright, and the point is to look like the browser the
+reader would have used, not to hide. There is one identity, it never rotates, and a refusal
+is never retried.
 
 A human vote overrides every layer. It lands in the local database as `human` — the next run
 picks the correction up straight away — and travels to the shared database:
@@ -233,6 +241,11 @@ the local cache only.
 
 ## Known ceilings
 
+- **A JavaScript challenge is a wall.** Honest headers get past a plain User-Agent filter,
+  not past a Cloudflare managed challenge (`cf-mitigated: challenge`, "Just a moment...")
+  — that wants a real browser executing JS with a matching TLS fingerprint. Such a page
+  exits `3` and fetches nothing. Getting through means driving a headless browser, which is
+  a different tool with a different risk profile.
 - **External CSS is invisible.** L1 reads inline styles and attributes off the raw DOM. A
   class hidden by a rule in a linked `.css` isn't detected: fetching and parsing stylesheets
   is a different order of complexity and a different risk profile.

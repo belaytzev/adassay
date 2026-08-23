@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"adassay.com/internal/fetch"
 )
 
 func main() {
@@ -14,6 +16,9 @@ func main() {
 	case errors.Is(err, errInjection):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	case errors.Is(err, fetch.ErrBlocked):
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
 	default:
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
