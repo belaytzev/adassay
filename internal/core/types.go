@@ -105,6 +105,8 @@ type Result struct {
 	Hidden      []Finding `json:"hidden,omitempty"`
 	SourceScore float64   `json:"source_score"`
 	Domain      string    `json:"domain"`
+	Visible     int       `json:"visible"`
+	Thin        bool      `json:"thin,omitempty"`
 }
 
 type Link struct {

@@ -14,6 +14,9 @@ func main() {
 	case errors.Is(err, errInjection):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	case errors.Is(err, errThin):
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
 	default:
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -68,6 +68,11 @@ adassay --verbose https://example.com/a      # plus the list of hidden findings
 Exit code `2` means hidden nodes were found on the page. The document still gets printed,
 but a script or CI job can refuse a source like that.
 
+Exit code `3` means the extraction is implausible: the raw page carries far more visible text
+than the reader managed to keep, so the article was probably rendered by JavaScript or hidden
+behind a wall. The `thin` and `visible` fields of the JSON `Result` carry the same signal. It
+lets a caller tell "the page had nothing to say" from "we failed to read the page".
+
 A human vote overrides every layer. It lands in the local database as `human` — the next run
 picks the correction up straight away — and travels to the shared database:
 

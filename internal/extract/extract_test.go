@@ -207,3 +207,23 @@ func TestRawScanKeysLinksByBlockText(t *testing.T) {
 		t.Error("a block without links must not be indexed")
 	}
 }
+
+func TestThin(t *testing.T) {
+	cases := []struct {
+		name    string
+		text    string
+		visible int
+		want    bool
+	}{
+		{"short page kept whole", strings.Repeat("a", 300), 320, false},
+		{"article dominates the page", strings.Repeat("a", 4000), 9000, false},
+		{"js-rendered page yields a stub", strings.Repeat("a", 150), 1086, true},
+		{"article body lost, boilerplate kept", strings.Repeat("a", 719), 5630, true},
+		{"empty page has nothing to lose", "", 100, false},
+	}
+	for _, c := range cases {
+		if got := thin(c.text, c.visible); got != c.want {
+			t.Errorf("%s: thin(%d runes, %d visible) = %v, want %v", c.name, len(c.text), c.visible, got, c.want)
+		}
+	}
+}

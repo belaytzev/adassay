@@ -18,6 +18,7 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 	type l1 struct {
 		findings []core.Finding
 		links    map[string][]core.Link
+		visible  int
 		err      error
 	}
 	done := make(chan l1, 1)
@@ -29,8 +30,8 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 		}
 		var findings []core.Finding
 		walk(doc, cfg, &findings)
-		links, _ := rawScan(doc)
-		done <- l1{findings: dedupe(findings), links: links}
+		links, visible := rawScan(doc)
+		done <- l1{findings: dedupe(findings), links: links, visible: visible}
 	}()
 
 	var base *url.URL
@@ -52,13 +53,25 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 	for i, s := range segs {
 		texts[i] = s.Text
 	}
+	text := strings.Join(texts, "\n\n")
 	return core.Result{
 		Title:    art.Title,
-		Text:     strings.Join(texts, "\n\n"),
+		Text:     text,
 		Segments: segs,
 		Hidden:   raw.findings,
 		Domain:   NormalizeDomain(pageURL),
+		Visible:  raw.visible,
+		Thin:     thin(text, raw.visible),
 	}, nil
+}
+
+const (
+	minVisible = 500
+	thinFactor = 4
+)
+
+func thin(text string, visible int) bool {
+	return visible >= minVisible && thinFactor*len([]rune(text)) < visible
 }
 
 func rawScan(root *html.Node) (map[string][]core.Link, int) {
