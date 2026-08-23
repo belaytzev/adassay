@@ -11,12 +11,11 @@ import (
 )
 
 const (
-	maxBody   = 1 << 20
-	maxBatch  = 256
-	maxReason = 48
+	maxBody  = 1 << 20
+	maxBatch = 256
 )
 
-func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store) {
+func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 	var req core.SubmitRequest
 	if !decodeBody(w, r, &req) {
 		return
@@ -26,6 +25,14 @@ func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store) {
 	}
 	if len(req.Entries) == 0 || len(req.Entries) > maxBatch {
 		writeError(w, http.StatusBadRequest, "entries must hold between 1 and "+strconv.Itoa(maxBatch)+" verdicts")
+		return
+	}
+	// The limiter outside already charged one token for the request. What it
+	// cannot see is that a request carries up to maxBatch verdicts: without
+	// charging for the rest, a batch multiplies the write rate by maxBatch.
+	if !g.lim.allowN(clientIP(r, g.trusted), len(req.Entries)-1) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "too many writes from this address")
 		return
 	}
 
@@ -116,8 +123,11 @@ func checkEnvelope(w http.ResponseWriter, normVersion int, clientID string) bool
 
 func validEntry(e core.SubmitEntry) bool {
 	// SourceShared would be the database quoting itself back: one client's
-	// lookup becomes a second vote for a verdict nobody re-derived.
-	if !core.ValidSource(e.Source) || e.Source == core.SourceShared {
+	// lookup becomes a second vote for a verdict nobody re-derived. SourceHuman
+	// outranks everything, so accepting it here would let one batch overturn
+	// 256 verdicts at once — a human correction goes through /v1/vote, one
+	// hash per request.
+	if !core.ValidSource(e.Source) || e.Source == core.SourceShared || e.Source == core.SourceHuman {
 		return false
 	}
 	if !validHash(e.Hash) {
@@ -135,15 +145,26 @@ func validHash(h string) bool {
 	return len(h) == 64 && strings.Trim(h, hexDigits) == ""
 }
 
+// validClientID checks the shape of a UUID, dashes in their places included:
+// without the positions "------------------------------------" would pass and
+// a quorum could be reached with identifiers nobody had to generate.
 func validClientID(id string) bool {
-	return len(id) == 36 && strings.Trim(id, hexDigits+"-") == ""
-}
-
-// validReason keeps reasons to rule identifiers. Free-form reasons are the one
-// field wide enough to smuggle article text into a database that stores none.
-func validReason(reason string) bool {
-	if reason == "" || len(reason) > maxReason {
+	if len(id) != 36 {
 		return false
 	}
-	return strings.Trim(reason, "abcdefghijklmnopqrstuvwxyz0123456789_-") == ""
+	for i, c := range id {
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !strings.ContainsRune(hexDigits, c) {
+				return false
+			}
+		}
+	}
+	return true
 }
+
+func validReason(reason string) bool { return core.ValidReason(reason) }

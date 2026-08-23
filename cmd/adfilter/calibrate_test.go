@@ -17,10 +17,11 @@ const (
 	maxNoise    = 7
 )
 
-// maxHiddenFalsePositives is the L1 baseline on real pages: meta descriptions,
-// CMS comments and aria-hidden UI strings that fire the detector without being
-// injections. It is a known defect held at its current size, not an approval.
-const maxHiddenFalsePositives = 16
+// maxHiddenFalsePositives is the L1 baseline on real pages. Comments, templates,
+// hidden attributes and meta descriptions now have to address a reader before
+// they count, which took the baseline from 16 pages to 2: a Wikipedia short
+// description behind display:none, and a zdnet page hiding prose the same way.
+const maxHiddenFalsePositives = 2
 
 func TestCorpusRegression(t *testing.T) {
 	cfg, err := config.Load("")

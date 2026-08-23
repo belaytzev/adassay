@@ -136,16 +136,16 @@ func TestVerdictPriority(t *testing.T) {
 
 func TestDomainNeverDropsAlone(t *testing.T) {
 	cfg := testConfig(t)
-	// Thresholds low enough and a shift wide enough that distrust alone would
-	// clear hi: only the one-step cap keeps the segment out of Drop.
-	cfg.L2.Hi, cfg.L2.Lo = 0.2, 0.1
+	// One feature fires and leaves the segment below lo, and the shift is wide
+	// enough to clear hi on its own: only the one-step cap keeps it out of Drop.
+	cfg.L2.Hi, cfg.L2.Lo = 0.35, 0.3
 	cfg.L3.MaxShift = 1
 
 	cache := newCache()
 	cache.score = 0
 	p := &Pipeline{Cfg: cfg, Cache: cache, Log: quiet()}
 
-	res := run(t, p, core.Segment{ID: "s1", Text: plainText})
+	res := run(t, p, core.Segment{ID: "s1", Text: plainText, Links: adLinks})
 	seg := res.Segments[0]
 
 	if seg.Verdict != core.Flag {
@@ -162,6 +162,23 @@ func TestDomainNeverDropsAlone(t *testing.T) {
 	}
 	if len(cache.upserts) != 0 {
 		t.Errorf("a flag is a question for the judge, not a cache row: %v", cache.upserts)
+	}
+}
+
+// The default thresholds sit close enough to the empty score that a shift on a
+// distrusted domain would carry every plain paragraph over lo. A document
+// flagged whole tells the agent exactly as much as one not flagged at all.
+func TestDomainDoesNotFlagPlainSegments(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.L3.MaxShift = 1
+
+	cache := newCache()
+	cache.score = 0
+	p := &Pipeline{Cfg: cfg, Cache: cache, Log: quiet()}
+
+	res := run(t, p, core.Segment{ID: "s1", Text: plainText})
+	if got := res.Segments[0].Verdict; got != core.Keep {
+		t.Errorf("verdict = %v, want keep: no rule fired on this segment", got)
 	}
 }
 
@@ -329,6 +346,35 @@ func TestSharedNotAskedAboveRules(t *testing.T) {
 	}
 }
 
+func TestSharedOverridesCachedModelVerdict(t *testing.T) {
+	cache := newCache()
+	cache.put(adText, store.Record{Verdict: core.Drop, Source: core.SourceOllama})
+	shared := &fakeShared{}
+	shared.put(adText, core.BucketEntry{Verdict: core.Keep, Source: core.SourceHuman})
+	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Shared: shared, Log: quiet()}
+
+	res := run(t, p, core.Segment{ID: "s1", Text: adText, Links: adLinks})
+
+	if len(shared.asked) != 1 {
+		t.Errorf("lookups = %d, want 1: a cached model verdict must not hide the shared database", len(shared.asked))
+	}
+	if got := res.Segments[0].Verdict; got != core.Keep {
+		t.Errorf("verdict = %v, want keep from the shared database", got)
+	}
+}
+
+func TestCachedModelVerdictSurvivesSharedMiss(t *testing.T) {
+	cache := newCache()
+	cache.put(plainText, store.Record{Verdict: core.Drop, Source: core.SourceOllama})
+	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Shared: &fakeShared{}, Log: quiet()}
+
+	res := run(t, p, core.Segment{ID: "s1", Text: plainText})
+
+	if got := res.Segments[0].Verdict; got != core.Drop {
+		t.Errorf("verdict = %v, want the cached model verdict to still outrank the rules", got)
+	}
+}
+
 func TestSharedMissFallsBackToRules(t *testing.T) {
 	shared := &fakeShared{}
 	p := &Pipeline{Cfg: testConfig(t), Cache: newCache(), Shared: shared, Log: quiet()}
@@ -366,5 +412,30 @@ func TestSharedDivergenceIsCounted(t *testing.T) {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("log missing %q:\n%s", want, buf.String())
 		}
+	}
+}
+
+// Adopted names the segments this run did not decide. The outbox reads it to
+// keep a verdict that came from elsewhere from being submitted back as a fresh
+// derivation, which would turn every reader into another confirming vote.
+func TestAdoptedMarksVerdictsTakenFromElsewhere(t *testing.T) {
+	shared := &fakeShared{}
+	shared.put(adText, core.BucketEntry{Verdict: core.Drop, Source: core.SourceRules, Reasons: []string{"disclaimer"}})
+	cache := newCache()
+	cache.put(plainText, store.Record{Verdict: core.Drop, Source: core.SourceHuman})
+	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Shared: shared, Log: quiet()}
+
+	const ownText = "Use code SAVE20 at checkout, sponsored by our partner, buy now."
+	run(t, p,
+		core.Segment{ID: "s1", Text: adText, Links: adLinks},
+		core.Segment{ID: "s2", Text: plainText},
+		core.Segment{ID: "s3", Text: ownText, Links: adLinks},
+	)
+
+	if !p.Adopted["s1"] || !p.Adopted["s2"] {
+		t.Errorf("adopted = %v, want the shared and the human-cached segment in it", p.Adopted)
+	}
+	if p.Adopted["s3"] {
+		t.Error("a segment the rules decided here must not count as adopted")
 	}
 }

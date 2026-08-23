@@ -51,7 +51,12 @@ func serve(addr, dbPath, trustedProxies string) error {
 		Addr:              addr,
 		Handler:           newMux(st, g, m),
 		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		// MaxBytesReader caps a body in bytes, not in time: without ReadTimeout
+		// a client dribbling one byte a second holds a goroutine for as long as
+		// it likes, and the rate limiter counts requests, not open connections.
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 	fmt.Fprintf(os.Stderr, "adfilter-server listening on %s, db %s\n", addr, dbPath)
 	return srv.ListenAndServe()

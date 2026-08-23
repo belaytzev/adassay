@@ -254,18 +254,6 @@ func grid(ev evaluation) []metrics {
 
 func round(v float64) float64 { return math.Round(v*100) / 100 }
 
-// best prefers precision over recall at equal F1: a false drop deletes a
-// sentence the reader wanted, a miss only leaves an ad in place.
-func best(ms []metrics) metrics {
-	sort.SliceStable(ms, func(i, j int) bool {
-		if a, b := ms[i].f1(), ms[j].f1(); math.Abs(a-b) > 1e-9 {
-			return a > b
-		}
-		return ms[i].precision() > ms[j].precision()
-	})
-	return ms[0]
-}
-
 // MinPrecision is the floor a threshold pair has to clear before recall is
 // worth anything. Dropping a segment deletes it from what the agent reads, and
 // a filter that quietly eats one honest paragraph in ten is worse than no
@@ -309,7 +297,7 @@ func report(w io.Writer, ev evaluation, l2 config.L2) error {
 	cur := score(ev, l2.Hi, l2.Lo)
 	printRow(w, cur)
 	fmt.Fprintln(w, "\nbest on the grid:")
-	printRow(w, best(g))
+	printRow(w, topBy(g, 1)[0])
 	fmt.Fprintf(w, "\nbest with precision >= %.2f, then widest coverage:\n", MinPrecision)
 	printRow(w, safest(g))
 

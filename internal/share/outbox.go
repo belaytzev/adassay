@@ -13,6 +13,7 @@ import (
 
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/judge"
+	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/store"
 )
 
@@ -63,13 +64,22 @@ func OptedOut() bool {
 
 // Record queues what the run is sure about: dropped segments and hidden-text
 // findings. The grey zone stays home — a Flag is an open question, and sending
-// one would leak a page without contributing a verdict.
-func (o *Outbox) Record(res core.Result) {
+// one would leak a page without contributing a verdict. Verdicts listed in
+// adopted are skipped: they were read from the shared database or from a
+// cached authority, and echoing them back is a vote for nothing.
+func (o *Outbox) Record(res core.Result, adopted map[string]bool) {
 	if o == nil {
 		return
 	}
 	for _, seg := range res.Segments {
-		if seg.Verdict != core.Drop {
+		if seg.Verdict != core.Drop || adopted[seg.ID] {
+			continue
+		}
+		// A Drop the domain score pushed up is a claim about this domain's
+		// reputation here, not about the text: the same paragraph elsewhere
+		// scored in the grey zone. Sending it would turn one install's
+		// distrust into a global verdict on words that never earned it.
+		if slices.Contains(seg.Reasons, pipeline.ReasonDomain) {
 			continue
 		}
 		o.enqueue(core.SubmitEntry{
@@ -81,9 +91,16 @@ func (o *Outbox) Record(res core.Result) {
 	}
 	for _, f := range res.Hidden {
 		o.enqueue(core.SubmitEntry{
-			Hash:    store.HexHash(f.Sample),
+			// Hidden samples live in their own hash space. A sample is often
+			// ordinary page prose — a meta description, an infobox caption —
+			// and L1 fires on clean pages, so hashing it like a segment would
+			// publish a Drop that silences that same paragraph everywhere it
+			// is visible.
+			Hash:    store.HexHash("hidden/" + f.Kind + "\n" + f.Sample),
 			Verdict: core.Drop,
-			Reasons: []string{"hidden:" + f.Kind},
+			// Underscore, not a colon: the backend accepts reasons as rule
+			// identifiers only, and a punctuated one is dropped on arrival.
+			Reasons: []string{"hidden_" + f.Kind},
 			Source:  core.SourceRules,
 		})
 	}
@@ -144,6 +161,11 @@ func (c *Client) Vote(hash string, v core.Verdict) error {
 func (c *Client) post(path string, body any) error {
 	if c == nil || c.BaseURL == "" {
 		return fmt.Errorf("share: no endpoint configured, set $%s", EnvEndpoint)
+	}
+	// Reads need no identity, writes do: without a stored id every batch would
+	// count as a different installation towards the backend's quorum.
+	if c.ID == "" {
+		return fmt.Errorf("share: %s: no client id, the config directory is not writable", path)
 	}
 	b, err := json.Marshal(body)
 	if err != nil {

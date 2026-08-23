@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -18,6 +19,10 @@ import (
 // Reason marks a verdict the model decided, so it stays distinguishable from a
 // rules verdict downstream.
 const Reason = "judge"
+
+// maxBody caps the model's answer: a verdict list for one page is kilobytes,
+// and a runaway generation must not be read into memory whole.
+const maxBody = 1 << 20
 
 type Judge struct {
 	Cfg  config.Judge
@@ -60,8 +65,11 @@ func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdic
 		batch := segs[start:min(start+size, len(segs))]
 		got, err := j.ask(topic, batch)
 		if err != nil {
-			j.log().Warn("judge unavailable, grey zone left as is", "err", err, "segments", len(batch))
-			continue
+			// One failure ends the round: a model that did not answer the
+			// first batch will not answer the eighth, and retrying costs the
+			// full timeout per batch while the reader waits.
+			j.log().Warn("judge unavailable, grey zone left as is", "err", err, "segments", len(segs)-start)
+			break
 		}
 		// Matching is by explicit id only. A model that drops, duplicates or
 		// reorders entries must not shift verdicts onto neighbouring segments.
@@ -98,7 +106,7 @@ func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict,
 		return nil, fmt.Errorf("judge: %s: %s", url, resp.Status)
 	}
 	var outer response
-	if err := json.NewDecoder(resp.Body).Decode(&outer); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&outer); err != nil {
 		return nil, fmt.Errorf("judge: decode envelope: %w", err)
 	}
 	return Parse(outer.Response)

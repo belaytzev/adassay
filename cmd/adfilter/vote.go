@@ -11,6 +11,7 @@ import (
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/extract"
 	"github.com/belaytzev/adfilter/internal/fetch"
+	"github.com/belaytzev/adfilter/internal/judge"
 	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/share"
 	"github.com/belaytzev/adfilter/internal/store"
@@ -25,51 +26,90 @@ func vote(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("adfilter vote", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adfilter vote <url|hash> --ad|--not-ad\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adfilter vote <url|hash|segment text> --ad|--not-ad\n\nA url votes on everything the filter did not keep, a 64-hex hash on that one\nsegment, and anything else is taken as the exact text of a segment.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	isAd := fs.Bool("ad", false, "the segment is advertising")
 	notAd := fs.Bool("not-ad", false, "the segment is not advertising")
 	cfgPath := fs.String("config", "", "path to rules.yaml overriding the built-in defaults")
+	dbPath := fs.String("db", "", "path to the local verdict database (default: user cache dir, $"+store.EnvDB+")")
 	endpoint := fs.String("share", "", "shared database endpoint (default: $"+share.EnvEndpoint+")")
-	if err := fs.Parse(args); err != nil {
+	rest, err := parseFlags(fs, args)
+	if err != nil {
 		return err
 	}
 	if *isAd == *notAd {
 		return fmt.Errorf("adfilter vote: pass exactly one of --ad or --not-ad")
 	}
-	if fs.NArg() != 1 {
-		return fmt.Errorf("adfilter vote: want one url or hash, got %d arguments", fs.NArg())
+	if len(rest) != 1 {
+		return fmt.Errorf("adfilter vote: want one url or hash, got %d arguments", len(rest))
 	}
 
+	// A missing endpoint is not an error: the correction the reader cares about
+	// is the local one, and an install without a shared database is the default.
 	client := share.New(*endpoint)
-	if client == nil {
-		return fmt.Errorf("adfilter vote: no shared database configured, set $%s", share.EnvEndpoint)
-	}
 	verdict := core.Keep
 	if *isAd {
 		verdict = core.Drop
 	}
 
-	hashes, err := targets(fs.Arg(0), *cfgPath)
+	hashes, err := targets(rest[0], *cfgPath, *dbPath, client)
 	if err != nil {
 		return err
 	}
+	// The correction lands locally first. A vote reaches everybody else only
+	// once a quorum of installations agrees with it, and until then the reader
+	// who sent it would keep seeing the verdict they just told us was wrong.
+	local, err := store.Open(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer local.Close()
+	// Anything queued for these hashes is now stale. The backend keeps one
+	// opinion per client per hash, so a later flush would overwrite this vote
+	// with what the rules thought before the reader corrected them.
+	if err := local.ClearPending(hashes); err != nil {
+		return err
+	}
+	// Every local correction lands before the first request goes out: a page
+	// vote is many hashes, and giving up halfway through the network half
+	// would leave the rest of the page uncorrected on the reader's own machine
+	// — with the queued verdicts for all of them already cleared.
 	for _, h := range hashes {
-		if err := client.Vote(h, verdict); err != nil {
+		raw, err := hex.DecodeString(h)
+		if err != nil {
 			return fmt.Errorf("adfilter vote: %w", err)
+		}
+		if err := local.Upsert(store.Record{Hash: raw, Verdict: verdict, Source: core.SourceHuman}); err != nil {
+			return err
 		}
 		fmt.Fprintf(stdout, "voted %s on %s\n", verdict, h)
 	}
 	if len(hashes) == 0 {
 		fmt.Fprintln(stdout, "nothing to vote on: the page has no filtered segments")
+		return nil
+	}
+	if client == nil {
+		fmt.Fprintf(stdout, "local only: no shared database configured, set $%s to send votes\n", share.EnvEndpoint)
+		return nil
+	}
+	for _, h := range hashes {
+		if err := client.Vote(h, verdict); err != nil {
+			return fmt.Errorf("adfilter vote: corrected locally, sending %s failed: %w", h, err)
+		}
 	}
 	return nil
 }
 
 // targets turns the argument into the hashes to vote on: a hash is itself, a
 // url is fetched and filtered, and anything else is treated as segment text.
-func targets(arg, cfgPath string) ([]string, error) {
+//
+// The page is run through the same pipeline as `adfilter <url>`, cache and
+// shared database included. A vote exists to correct a verdict the reader saw,
+// and the verdicts worth correcting — one adopted from the shared database, one
+// the judge made, one L3 pushed over the line — are exactly the ones the rules
+// alone would not reproduce.
+func targets(arg, cfgPath, dbPath string, client *share.Client) ([]string, error) {
 	if isHash(arg) {
 		return []string{strings.ToLower(arg)}, nil
 	}
@@ -89,7 +129,14 @@ func targets(arg, cfgPath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err = (&pipeline.Pipeline{Cfg: cfg}).Run(res)
+	s, err := store.Open(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer s.Close()
+	// Not a Visit: voting on a page is a correction, not a reading of it, and
+	// counting it twice would charge the domain for the same visit again.
+	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: s, Shared: client, Judge: judge.New(cfg.Judge)}).Run(res)
 	if err != nil {
 		return nil, err
 	}

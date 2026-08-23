@@ -18,13 +18,23 @@ func newMux(st *Store, g *guard, m *metrics) *http.ServeMux {
 	mux.HandleFunc("GET /v1/segments/{prefix}", m.count(&m.bucketReqs, func(w http.ResponseWriter, r *http.Request) {
 		handleBucket(w, r, st, m)
 	}))
-	mux.HandleFunc("POST /v1/segments", g.limit(m.count(&m.submitReqs, func(w http.ResponseWriter, r *http.Request) {
-		handleSubmit(w, r, st)
+	// Counting wraps the limiter, not the other way round: a flood is the one
+	// thing this counter exists to make visible, and rejected requests are the
+	// whole flood.
+	mux.HandleFunc("POST /v1/segments", m.count(&m.submitReqs, g.limit(func(w http.ResponseWriter, r *http.Request) {
+		handleSubmit(w, r, st, g)
 	})))
-	mux.HandleFunc("POST /v1/vote", g.limit(m.count(&m.voteReqs, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/vote", m.count(&m.voteReqs, g.limit(func(w http.ResponseWriter, r *http.Request) {
 		handleVote(w, r, st)
 	})))
 	mux.HandleFunc("GET /metrics", m.handler(st))
+	// The probes get their own endpoint. Pointing them at /metrics makes every
+	// liveness check pay for the gauge query, and a database slow enough to
+	// miss the probe timeout would then restart the pod instead of just
+	// serving a late scrape.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	return mux
 }
 

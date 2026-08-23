@@ -66,31 +66,31 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 	submitAs(t, mux, client(3), "", "", core.SubmitEntry{Hash: unknown, Verdict: core.Drop, Source: core.SourceRules})
 	// A disagreement the store refuses, and one it accepts: both are divergence.
 	submitAs(t, mux, client(4), "", "", core.SubmitEntry{Hash: known, Verdict: core.Keep, Source: core.SourceRules})
-	submitAs(t, mux, client(5), "", "", core.SubmitEntry{Hash: known, Verdict: core.Keep, Source: core.SourceHuman})
+	voteAs(t, mux, client(5), known, core.Keep)
 
 	get(t, st, bucketPath(unknown[:core.PrefixLen], core.NormVersion))
 
 	got := scrape(t, mux)
 	want := map[string]float64{
-		`adfilter_requests_total{endpoint="submit"}`: 5,
-		`adfilter_requests_total{endpoint="vote"}`:   0,
+		`adfilter_requests_total{endpoint="submit"}`: 4,
+		`adfilter_requests_total{endpoint="vote"}`:   1,
 		"adfilter_submit_divergent_total":            2,
-		// known was overturned by the human vote and lost its confirmations,
-		// so both rows are back in quarantine.
-		"adfilter_verdicts_published":   0,
-		"adfilter_verdicts_quarantined": 2,
+		// The human vote contradicts known but stands alone, so it is staged
+		// and known keeps being served; unknown is the one row in quarantine.
+		"adfilter_verdicts_published":   1,
+		"adfilter_verdicts_quarantined": 1,
 	}
 	for name, v := range want {
 		if got[name] != v {
 			t.Errorf("%s = %v, want %v", name, got[name], v)
 		}
 	}
-	// Bucket lookups: the published one hit, the quarantined one did not.
+	// The only bucket asked for holds the quarantined row, so it is a miss.
 	if got[`adfilter_requests_total{endpoint="bucket"}`] < 1 {
 		t.Errorf("bucket requests = %v, want at least one", got[`adfilter_requests_total{endpoint="bucket"}`])
 	}
 	if got["adfilter_bucket_hits_total"] != 0 {
-		t.Errorf("bucket hits = %v, want 0: nothing is published", got["adfilter_bucket_hits_total"])
+		t.Errorf("bucket hits = %v, want 0: the prefix read holds nothing published", got["adfilter_bucket_hits_total"])
 	}
 }
 

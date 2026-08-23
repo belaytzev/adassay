@@ -54,7 +54,7 @@ func newServer(s *server) *mcp.Server {
 	}, s.fetchClean)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "check_text",
-		Description: "Check text you already have for advertising and marketing inserts. Makes no network requests.",
+		Description: "Check text you already have for advertising and marketing inserts. Fetches nothing: the text is never sent anywhere except, for segments the rules cannot decide, to the model at the configured judge endpoint (a local Ollama by default).",
 	}, s.checkText)
 	return srv
 }
@@ -89,14 +89,16 @@ func (s *server) analyze(page []byte, pageURL string) (*mcp.CallToolResult, repo
 		return nil, report{}, err
 	}
 
-	rep := report{
-		Markdown:    render.Markdown(res),
-		Title:       res.Title,
-		Domain:      res.Domain,
-		SourceScore: res.SourceScore,
-		HiddenCount: len(res.Hidden),
-		Hidden:      res.Hidden,
-	}
+	// The structured half of the result is read by the same agent that reads
+	// the markdown, so the title and the hidden samples — page-controlled text,
+	// the samples being the injections themselves — get defused as well.
+	rep := report{Markdown: render.Markdown(res)}
+	res = render.Safe(res)
+	rep.Title = res.Title
+	rep.Domain = res.Domain
+	rep.SourceScore = res.SourceScore
+	rep.HiddenCount = len(res.Hidden)
+	rep.Hidden = res.Hidden
 	for _, seg := range res.Segments {
 		switch seg.Verdict {
 		case core.Drop:

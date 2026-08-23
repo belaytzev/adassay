@@ -41,6 +41,9 @@ const offScreenPx = -500
 
 // zeroWidthRun is where invisible code points stop reading as typography —
 // emoji joiners, word joiners, soft break hints — and start reading as a payload.
+// It counts consecutive code points: Persian spelling puts one ZWNJ between two
+// letters and an emoji family holds together on single ZWJs, so a per-node total
+// would call ordinary text an injection.
 const zeroWidthRun = 8
 
 // Hidden reports nodes the page keeps out of sight. It reads static markup
@@ -76,7 +79,7 @@ func dedupe(in []core.Finding) []core.Finding {
 func walk(n *html.Node, cfg config.L1, out *[]core.Finding) {
 	switch n.Type {
 	case html.CommentNode:
-		if s := collapse(n.Data); significant(s, cfg) {
+		if s := collapse(n.Data); significant(s, KindComment, cfg) {
 			*out = append(*out, core.Finding{Kind: KindComment, Sample: sample(s)})
 		}
 		return
@@ -91,7 +94,7 @@ func walk(n *html.Node, cfg config.L1, out *[]core.Finding) {
 			return
 		}
 		if kind := classify(n); kind != "" {
-			if s := nodeText(n); significant(s, cfg) {
+			if s := nodeText(n); significant(s, kind, cfg) {
 				*out = append(*out, core.Finding{Kind: kind, Sample: sample(s)})
 				return
 			}
@@ -124,19 +127,54 @@ func styleKind(st map[string]string) string {
 	case st["display"] == "none",
 		st["visibility"] == "hidden",
 		isZero(st["opacity"]),
-		isZeroLength(st["font-size"]),
-		isZeroLength(st["max-height"]) && st["overflow"] == "hidden":
+		isZeroLength(st["font-size"]):
 		return KindCSSHidden
 	}
-	for _, prop := range []string{"left", "top", "right", "margin-left", "margin-top", "text-indent"} {
+	// Collapsed accordions and screen-reader offsets use max-height:0 and
+	// negative margins legitimately, and L1 findings cost the domain trust: a
+	// detector nothing in the corpus exercises only buys false positives.
+	for _, prop := range []string{"left", "top", "right", "bottom", "text-indent"} {
 		if v, ok := length(st[prop]); ok && v <= offScreenPx {
 			return KindOffScreen
 		}
 	}
-	if c, bg := st["color"], st["background-color"]; c != "" && c == bg {
+	if c, bg := normColor(st["color"]), background(st); c != "" && c == bg {
 		return KindColor
 	}
 	return ""
+}
+
+// background reads the colour out of either the longhand or the shorthand: the
+// shorthand is what most pages actually write, and its colour is the one token
+// that parses as one.
+func background(st map[string]string) string {
+	if v := st["background-color"]; v != "" {
+		return normColor(v)
+	}
+	for _, tok := range strings.Fields(st["background"]) {
+		if strings.HasPrefix(tok, "#") || tok == "white" || tok == "black" {
+			return normColor(tok)
+		}
+	}
+	return ""
+}
+
+// normColor puts equivalent notations of the same colour into one spelling, so
+// that color:#fff on background:#ffffff still compares equal. Only the handful
+// of names a text-hiding trick reaches for is worth mapping; anything else
+// compares as written, which is how this read before.
+func normColor(v string) string {
+	v = strings.TrimSpace(v)
+	switch v {
+	case "white":
+		return "#ffffff"
+	case "black":
+		return "#000000"
+	}
+	if len(v) == 4 && v[0] == '#' {
+		return string([]byte{'#', v[1], v[1], v[2], v[2], v[3], v[3]})
+	}
+	return v
 }
 
 func longAttrs(n *html.Node, cfg config.L1) []core.Finding {
@@ -147,7 +185,7 @@ func longAttrs(n *html.Node, cfg config.L1) []core.Finding {
 	}
 	for _, name := range names {
 		v := collapse(attr(n, name))
-		if len([]rune(v)) > cfg.LongAttrLength && prose(v) {
+		if len([]rune(v)) > cfg.LongAttrLength && prose(v) && significant(v, KindLongAttr, cfg) {
 			out = append(out, core.Finding{Kind: KindLongAttr, Sample: sample(v)})
 		}
 	}
@@ -171,6 +209,12 @@ func parseStyle(s string) map[string]string {
 		prop, val, ok := strings.Cut(decl, ":")
 		if !ok {
 			continue
+		}
+		// The priority flag is dropped before comparison: display:none
+		// !important hides exactly as much as display:none, and leaving the
+		// flag in the value turns every exact match below into a miss.
+		if i := strings.IndexByte(val, '!'); i >= 0 {
+			val = val[:i]
 		}
 		st[strings.ToLower(strings.TrimSpace(prop))] = strings.ToLower(strings.Join(strings.Fields(val), " "))
 	}
@@ -253,17 +297,33 @@ func collapse(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// significant separates an injection from ordinary invisible markup. aria-hidden
-// and off-screen text are legitimate on half the web, so a candidate only counts
-// when it is long enough to carry a message, tells the reader what to do, or
-// addresses an agent by name.
-func significant(s string, cfg config.L1) bool {
+// looseKinds hide text with a mechanism ordinary pages do not use for prose:
+// display:none, an off-screen offset, colour on colour, a noscript fallback. A
+// long readable string behind one of those is evidence by itself.
+//
+// Everywhere else hiding is routine authoring — CMS comments, prerendered
+// templates, screen-reader strings, meta descriptions — and the corpus showed
+// length alone firing on seven clean pages out of twenty-one. Those kinds count
+// only when the text instructs a reader or addresses an agent.
+var looseKinds = map[string]bool{
+	KindCSSHidden: true,
+	KindOffScreen: true,
+	KindColor:     true,
+	KindNoscript:  true,
+}
+
+func significant(s, kind string, cfg config.L1) bool {
 	if !hasLetters(s) {
 		return false
 	}
-	if len([]rune(s)) > cfg.MinLength {
+	if looseKinds[kind] && len([]rune(s)) > cfg.MinLength {
 		return true
 	}
+	return directed(s, cfg)
+}
+
+// directed reports text written at a reader rather than about the page.
+func directed(s string, cfg config.L1) bool {
 	low := strings.ToLower(s)
 	for _, list := range [][]string{cfg.Imperatives, cfg.AgentNames} {
 		for _, p := range list {
@@ -281,7 +341,7 @@ func significant(s string, cfg config.L1) bool {
 // so it is reported together with the text it was hidden in.
 func invisible(s string) string {
 	var payload strings.Builder
-	zeros := 0
+	zeros, longest := 0, 0
 	for _, r := range s {
 		switch {
 		case r >= 0xE0000 && r <= 0xE007F:
@@ -290,13 +350,16 @@ func invisible(s string) string {
 			}
 		case r == 0x200B, r == 0x200C, r == 0x200D, r == 0x2060, r == 0xFEFF:
 			zeros++
+			longest = max(longest, zeros)
+		default:
+			zeros = 0
 		}
 	}
 	if p := collapse(payload.String()); hasLetters(p) {
 		return p
 	}
-	if zeros >= zeroWidthRun {
-		return strconv.Itoa(zeros) + " zero-width characters in: " + collapse(strings.Map(dropInvisible, s))
+	if longest >= zeroWidthRun {
+		return strconv.Itoa(longest) + " zero-width characters in: " + collapse(strings.Map(dropInvisible, s))
 	}
 	return ""
 }

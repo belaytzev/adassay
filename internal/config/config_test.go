@@ -77,6 +77,13 @@ func TestValidate(t *testing.T) {
 			c.L2.Shortcuts = []Shortcut{{Features: []string{"promo_code"}, Verdict: "nuke"}}
 		}, "unknown verdict"},
 		{"empty patterns", func(c *Config) { c.L2.Patterns.Disclaimers = nil }, "disclaimers is empty"},
+		// "" matches at every offset, so the feature would fire on every page.
+		{"blank pattern", func(c *Config) {
+			c.L2.Patterns.Disclaimers = append(c.L2.Patterns.Disclaimers, " ")
+		}, "disclaimers["},
+		{"blank imperative", func(c *Config) {
+			c.L1.Imperatives = append(c.L1.Imperatives, "")
+		}, "imperatives["},
 		{"zero min length", func(c *Config) { c.L1.MinLength = 0 }, "min_length"},
 		{"empty imperatives", func(c *Config) { c.L1.Imperatives = nil }, "imperatives is empty"},
 		{"empty agent names", func(c *Config) { c.L1.AgentNames = nil }, "agent_names is empty"},
@@ -114,4 +121,28 @@ func write(t *testing.T, body string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// An override file that overrides nothing is a config with every value
+// commented out, not a broken file: yaml reports it as io.EOF.
+func TestEmptyOverrideFileKeepsDefaults(t *testing.T) {
+	for name, body := range map[string]string{"empty": "", "only comments": "# nothing to change\n"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "rules.yaml")
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			def, err := Load("")
+			if err != nil {
+				t.Fatalf("load defaults: %v", err)
+			}
+			if cfg.L2.Hi != def.L2.Hi || cfg.L2.Lo != def.L2.Lo {
+				t.Errorf("thresholds = %v/%v, want the defaults %v/%v", cfg.L2.Hi, cfg.L2.Lo, def.L2.Hi, def.L2.Lo)
+			}
+		})
+	}
 }

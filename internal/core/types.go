@@ -5,6 +5,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type Verdict int
@@ -68,6 +69,17 @@ func ParseVerdict(s string) (Verdict, error) {
 		return Keep, fmt.Errorf("core: unknown verdict %q", s)
 	}
 	return v, nil
+}
+
+// MaxReason bounds a reason, and ValidReason holds on both sides of the wire:
+// the backend refuses anything else on write, and the renderer refuses to put
+// anything else in a marker. Reasons are rule identifiers — the one field wide
+// enough to carry article text or marker syntax if left free-form.
+const MaxReason = 48
+
+func ValidReason(r string) bool {
+	return r != "" && len(r) <= MaxReason &&
+		strings.Trim(r, "abcdefghijklmnopqrstuvwxyz0123456789_-") == ""
 }
 
 func ValidSource(s string) bool {

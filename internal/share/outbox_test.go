@@ -11,6 +11,7 @@ import (
 
 	"github.com/belaytzev/adfilter/internal/core"
 	"github.com/belaytzev/adfilter/internal/judge"
+	"github.com/belaytzev/adfilter/internal/pipeline"
 	"github.com/belaytzev/adfilter/internal/store"
 )
 
@@ -41,7 +42,7 @@ func collector(t *testing.T) (*Client, *[]core.SubmitRequest) {
 		json.NewEncoder(w).Encode(core.SubmitResponse{Accepted: len(req.Entries)})
 	}))
 	t.Cleanup(srv.Close)
-	return &Client{BaseURL: srv.URL, HTTP: srv.Client()}, &got
+	return &Client{BaseURL: srv.URL, HTTP: srv.Client(), ID: "test-client"}, &got
 }
 
 func spoolOf(n int, age time.Duration) *fakeSpool {
@@ -78,7 +79,7 @@ func TestRecordSpoolsToDiskWithoutSending(t *testing.T) {
 	}
 	defer s.Close()
 
-	NewOutbox(s, client, false).Record(result())
+	NewOutbox(s, client, false).Record(result(), nil)
 
 	if len(*got) != 0 {
 		t.Fatalf("record must not talk to the network, got %d request(s)", len(*got))
@@ -106,7 +107,7 @@ func TestRecordSpoolsToDiskWithoutSending(t *testing.T) {
 func TestGreyZoneStaysHome(t *testing.T) {
 	spool := &fakeSpool{}
 	client, _ := collector(t)
-	NewOutbox(spool, client, false).Record(result())
+	NewOutbox(spool, client, false).Record(result(), nil)
 
 	flagged := store.HexHash("This one looked commercial but nobody was sure.")
 	kept := store.HexHash("A burr grinder gives an even particle size.")
@@ -190,7 +191,7 @@ func TestOptOutSendsNothing(t *testing.T) {
 		t.Fatal("$" + EnvOptOut + " must leave no outbox at all")
 	}
 
-	o.Record(result())
+	o.Record(result(), nil)
 	o.Flush()
 	if len(*got) != 0 {
 		t.Errorf("opted out, still sent %d request(s)", len(*got))
@@ -219,5 +220,55 @@ func TestVoteSendsFullHash(t *testing.T) {
 	}
 	if got.Hash != hash || got.Verdict != core.Drop || got.NormVersion != core.NormVersion {
 		t.Errorf("vote arrived as %+v", got)
+	}
+}
+
+// A verdict read from the shared database must not be posted back as if this
+// install had derived it: every reader would otherwise add a confirmation to a
+// verdict nobody re-checked, and the quorum would count readers, not evidence.
+func TestAdoptedVerdictsAreNotSentBack(t *testing.T) {
+	spool := &fakeSpool{}
+	client, _ := collector(t)
+	NewOutbox(spool, client, false).Record(result(), map[string]bool{"s1": true})
+
+	adopted := store.HexHash("Use code SAVE20 at checkout for our sponsor.")
+	own := store.HexHash("The model called this one advertising.")
+	var sawOwn bool
+	for _, e := range spool.entries {
+		if e.Hash == adopted {
+			t.Error("a verdict taken from the shared database was queued for submission")
+		}
+		sawOwn = sawOwn || e.Hash == own
+	}
+	if !sawOwn {
+		t.Error("the run's own verdict was dropped along with the adopted one")
+	}
+}
+
+// L3 is local reputation: a Drop it pushed up says the domain is untrusted
+// here, not that the words are advertising anywhere else.
+func TestDomainDistrustStaysHome(t *testing.T) {
+	spool := &fakeSpool{}
+	client, _ := collector(t)
+	res := result()
+	res.Segments = append(res.Segments, core.Segment{
+		ID:      "s5",
+		Text:    "Standard disclaimer on a domain that hides text.",
+		Verdict: core.Drop,
+		Reasons: []string{"disclaimer", pipeline.ReasonDomain},
+	})
+	NewOutbox(spool, client, false).Record(res, nil)
+
+	shifted := store.HexHash("Standard disclaimer on a domain that hides text.")
+	own := store.HexHash("The model called this one advertising.")
+	var sawOwn bool
+	for _, e := range spool.entries {
+		if e.Hash == shifted {
+			t.Error("a verdict the domain score raised was queued for submission")
+		}
+		sawOwn = sawOwn || e.Hash == own
+	}
+	if !sawOwn {
+		t.Error("the run's own verdict was dropped along with the shifted one")
 	}
 }

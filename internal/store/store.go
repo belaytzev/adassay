@@ -140,7 +140,10 @@ func (s *Store) Upsert(rec Record) error {
 }
 
 // Visit counts one page of a domain and the hidden-text findings it carried;
-// L3 reads the ratio back through Domain.
+// L3 reads the ratio back through Domain. updated_at moves only when the visit
+// brought findings, because it dates the evidence: L3 decays the penalty by its
+// age, and the score is read right after this call — refreshing the timestamp
+// on every clean visit would leave half_life_days without any effect at all.
 func (s *Store) Visit(domain string, findings int) error {
 	_, err := s.db.Exec(
 		`INSERT INTO domains (hash, norm_version, visits, findings, updated_at)
@@ -148,7 +151,8 @@ func (s *Store) Visit(domain string, findings int) error {
 		 ON CONFLICT (hash, norm_version) DO UPDATE SET
 		 	visits     = domains.visits + 1,
 		 	findings   = domains.findings + excluded.findings,
-		 	updated_at = excluded.updated_at`,
+		 	updated_at = CASE WHEN excluded.findings > 0
+		 	             THEN excluded.updated_at ELSE domains.updated_at END`,
 		HashDomain(domain), core.NormVersion, findings, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("store: visit: %w", err)

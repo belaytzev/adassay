@@ -34,7 +34,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	fs := flag.NewFlagSet("adfilter", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n       adfilter calibrate [flags]\n       adfilter vote <url|hash> --ad|--not-ad\n\nWith no url the page is read from stdin.\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adfilter [flags] [url]\n       adfilter calibrate [flags]\n       adfilter vote <url|hash|segment text> --ad|--not-ad\n\nWith no url the page is read from stdin.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	asJSON := fs.Bool("json", false, "print the full Result as JSON instead of markdown")
@@ -42,11 +42,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	dbPath := fs.String("db", "", "path to the local verdict database (default: user cache dir, $"+store.EnvDB+")")
 	verbose := fs.Bool("verbose", false, "report hidden-text findings alongside the document")
 	noShare := fs.Bool("no-share", false, "never send verdicts to the shared database ($"+share.EnvOptOut+")")
-	if err := fs.Parse(args); err != nil {
+	rest, err := parseFlags(fs, args)
+	if err != nil {
 		return err
 	}
-	if fs.NArg() > 1 {
-		return fmt.Errorf("adfilter: want at most one url, got %d", fs.NArg())
+	if len(rest) > 1 {
+		return fmt.Errorf("adfilter: want at most one url, got %d", len(rest))
 	}
 
 	cfg, err := config.Load(*cfgPath)
@@ -54,7 +55,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	pageURL := fs.Arg(0)
+	var pageURL string
+	if len(rest) == 1 {
+		pageURL = rest[0]
+	}
 	page, err := read(pageURL, stdin)
 	if err != nil {
 		return err
@@ -66,11 +70,13 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 
 	// Without a url there is no domain to count and nothing asked for a
-	// database, so a stdin run stays a pure function of its input.
+	// database, so a stdin run keeps to itself: no local database, and no
+	// question asked of the shared one either.
 	var cache pipeline.Cache
 	var outbox *share.Outbox
-	client := share.New("")
+	var client *share.Client
 	if pageURL != "" || *dbPath != "" {
+		client = share.New("")
 		s, err := store.Open(*dbPath)
 		if err != nil {
 			return err
@@ -88,11 +94,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		outbox.Flush()
 	}
 
-	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: cache, Shared: shared(client), Judge: judge.New(cfg.Judge)}).Run(res)
+	p := &pipeline.Pipeline{Cfg: cfg, Cache: cache, Shared: client, Judge: judge.New(cfg.Judge)}
+	res, err = p.Run(res)
 	if err != nil {
 		return err
 	}
-	outbox.Record(res)
+	outbox.Record(res, p.Adopted)
 
 	if err := write(stdout, res, *asJSON, *verbose); err != nil {
 		return err
@@ -119,21 +126,14 @@ func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
 		return render.JSON(w, res)
 	}
 	if verbose {
+		// The sample is the injection itself. It goes out on one line and
+		// through Defuse, or reporting the find hands the agent the payload.
 		for _, f := range res.Hidden {
-			if _, err := fmt.Fprintf(w, "# adfilter: hidden %s: %s\n", f.Kind, f.Sample); err != nil {
+			if _, err := fmt.Fprintf(w, "# adfilter: hidden %s: %s\n", f.Kind, render.Sample(f.Sample)); err != nil {
 				return err
 			}
 		}
 	}
 	_, err := fmt.Fprintln(w, render.Markdown(res))
 	return err
-}
-
-// shared keeps a missing endpoint out of the pipeline as a nil interface
-// rather than a typed nil that would be asked and always answer no.
-func shared(c *share.Client) pipeline.Shared {
-	if c == nil {
-		return nil
-	}
-	return c
 }

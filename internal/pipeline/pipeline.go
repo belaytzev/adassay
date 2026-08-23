@@ -46,6 +46,12 @@ type Pipeline struct {
 	// Diverged counts segments where the local rules disagreed with the shared
 	// database. A run full of divergences means the heuristics drifted.
 	Diverged int
+
+	// Adopted holds the ids of segments this run did not decide itself: the
+	// verdict came from the shared database or from a cached verdict above the
+	// rules. Sending those back would let one derivation confirm itself once
+	// per reader, which is exactly what the quorum is meant to prevent.
+	Adopted map[string]bool
 }
 
 // priority resolves two verdicts for the same segment: a human override beats
@@ -78,7 +84,14 @@ func (p *Pipeline) Run(res core.Result) (core.Result, error) {
 	for i, seg := range res.Segments {
 		decided, settled := p.segment(seg, doc, score)
 		res.Segments[i] = decided
-		if !settled && decided.Verdict == core.Flag {
+		if settled {
+			if p.Adopted == nil {
+				p.Adopted = map[string]bool{}
+			}
+			p.Adopted[decided.ID] = true
+			continue
+		}
+		if decided.Verdict == core.Flag {
 			grey = append(grey, i)
 		}
 	}
@@ -117,11 +130,11 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 	hash := store.Hash(seg.Text)
 	cached, hit := p.lookup(hash)
 
-	// A cached verdict from a source above the rules is the answer, and the
-	// rules never run: re-scoring would risk overriding a human with a
+	// A cached verdict from the shared database or a human is the answer, and
+	// the rules never run: re-scoring would risk overriding a human with a
 	// heuristic. Our own past output is not an authority, so a rules row is
 	// re-scored — and the disagreement is worth a line in the log.
-	if hit && Outranks(cached.Source, core.SourceRules) {
+	if hit && !Outranks(core.SourceShared, cached.Source) {
 		seg.Verdict = cached.Verdict
 		seg.Reasons = cached.Reasons
 		return seg, true
@@ -148,6 +161,16 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 		return seg, true
 	}
 
+	// The lookup missed, so a cached model verdict is the best answer left: it
+	// outranks the rules, and holding it back until here is what lets the
+	// shared database correct a judge the local run would otherwise repeat
+	// forever.
+	if hit && Outranks(cached.Source, core.SourceRules) {
+		seg.Verdict = cached.Verdict
+		seg.Reasons = cached.Reasons
+		return seg, true
+	}
+
 	seg = rules.Apply(seg, doc, p.Cfg.L2)
 	seg = p.shift(seg, sourceScore)
 
@@ -167,7 +190,11 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 // segment score, clamped to 0..1. It escalates by at most one step, so a domain
 // with a zero score raises suspicion and never convicts on its own.
 func (p *Pipeline) shift(seg core.Segment, sourceScore float64) core.Segment {
-	if sourceScore >= 1 {
+	// A segment where nothing fired has no borderline verdict to nudge. Without
+	// this the shift alone lifts every plain paragraph over lo on a distrusted
+	// domain, and a document marked whole says exactly as much as one not
+	// marked at all.
+	if sourceScore >= 1 || len(seg.Reasons) == 0 {
 		return seg
 	}
 	before := seg.Verdict

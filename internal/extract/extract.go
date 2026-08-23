@@ -153,7 +153,19 @@ func blockContent(n *html.Node) (string, []core.Link) {
 }
 
 func clean(s string) string {
-	return collapse(strings.Map(dropInvisible, s))
+	return collapse(strings.Map(dropPadding, s))
+}
+
+// dropPadding removes invisible padding from text the agent will read, but keeps
+// ZWNJ and ZWJ: they are spelling in Persian, Urdu and Hindi and are what holds
+// an emoji sequence together. Stripping them here would corrupt the document the
+// filter exists to hand over intact — the hash space strips them separately, in
+// store.Normalize.
+func dropPadding(r rune) rune {
+	if r == 0x200C || r == 0x200D {
+		return r
+	}
+	return dropInvisible(r)
 }
 
 // NormalizeDomain reduces a URL or a bare host to the key the domain score is

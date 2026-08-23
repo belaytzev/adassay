@@ -88,7 +88,7 @@ func TestAcceptanceLayersEndToEnd(t *testing.T) {
 // on: Flag is a marker on text the agent still reads, Drop is a deletion.
 func TestAcceptanceFlagKeepsTextDropCutsIt(t *testing.T) {
 	var out bytes.Buffer
-	if err := run(nil, strings.NewReader(acceptancePage), &out); !errors.Is(err, errInjection) {
+	if err := run(offline(), strings.NewReader(acceptancePage), &out); !errors.Is(err, errInjection) {
 		t.Fatalf("run: %v", err)
 	}
 	doc := out.String()
@@ -133,7 +133,7 @@ func TestAcceptanceLocalDatabaseStoresNoText(t *testing.T) {
 func runJSON(t *testing.T, db, url string) core.Result {
 	t.Helper()
 	var out bytes.Buffer
-	err := run([]string{"--json", "--no-share", "--db", db, url}, strings.NewReader(""), &out)
+	err := run(offline("--json", "--no-share", "--db", db, url), strings.NewReader(""), &out)
 	if err != nil && !errors.Is(err, errInjection) {
 		t.Fatalf("run: %v", err)
 	}

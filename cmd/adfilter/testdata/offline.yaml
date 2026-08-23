@@ -1,0 +1,6 @@
+# Overrides for the CLI tests: a judge nobody is listening for. Without it the
+# tests would ask whatever Ollama the developer happens to have running, and a
+# live model decides the grey zone differently on every machine.
+judge:
+  endpoint: http://127.0.0.1:1
+  timeout: 1s

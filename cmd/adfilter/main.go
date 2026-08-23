@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 )
@@ -11,7 +12,7 @@ import (
 func main() {
 	err := run(os.Args[1:], os.Stdin, os.Stdout)
 	switch {
-	case err == nil:
+	case err == nil, errors.Is(err, flag.ErrHelp):
 	case errors.Is(err, errInjection):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)

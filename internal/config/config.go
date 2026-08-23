@@ -7,8 +7,11 @@ package config
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -108,7 +111,9 @@ func Load(path string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: %w", err)
 		}
-		if err := decode(data, cfg); err != nil {
+		// An empty or fully commented-out file decodes to io.EOF: it overrides
+		// nothing, which is a valid thing to hand a program built on defaults.
+		if err := decode(data, cfg); err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("config: %s: %w", path, err)
 		}
 	}
@@ -131,11 +136,11 @@ func (c *Config) Validate() error {
 	if c.L1.LongAttrLength <= 0 {
 		return fmt.Errorf("config: l1.long_attr_length must be positive")
 	}
-	if len(c.L1.Imperatives) == 0 {
-		return fmt.Errorf("config: l1.imperatives is empty")
-	}
-	if len(c.L1.AgentNames) == 0 {
-		return fmt.Errorf("config: l1.agent_names is empty")
+	if err := checkPatterns(map[string][]string{
+		"l1.imperatives": c.L1.Imperatives,
+		"l1.agent_names": c.L1.AgentNames,
+	}); err != nil {
+		return err
 	}
 
 	if c.L2.Lo < 0 || c.L2.Hi > 1 {
@@ -171,17 +176,15 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("config: shortcut %d: %w", i, err)
 		}
 	}
-	for name, list := range map[string][]string{
-		"promo_words":      c.L2.Patterns.PromoWords,
-		"disclaimers":      c.L2.Patterns.Disclaimers,
-		"affiliate_params": c.L2.Patterns.AffiliateParams,
-		"affiliate_hosts":  c.L2.Patterns.AffiliateHosts,
-		"cta_words":        c.L2.Patterns.CTAWords,
-		"urgency_words":    c.L2.Patterns.UrgencyWords,
-	} {
-		if len(list) == 0 {
-			return fmt.Errorf("config: l2.patterns.%s is empty", name)
-		}
+	if err := checkPatterns(map[string][]string{
+		"l2.patterns.promo_words":      c.L2.Patterns.PromoWords,
+		"l2.patterns.disclaimers":      c.L2.Patterns.Disclaimers,
+		"l2.patterns.affiliate_params": c.L2.Patterns.AffiliateParams,
+		"l2.patterns.affiliate_hosts":  c.L2.Patterns.AffiliateHosts,
+		"l2.patterns.cta_words":        c.L2.Patterns.CTAWords,
+		"l2.patterns.urgency_words":    c.L2.Patterns.UrgencyWords,
+	}); err != nil {
+		return err
 	}
 
 	if c.L3.MinVisits <= 0 {
@@ -208,6 +211,23 @@ func (c *Config) Validate() error {
 	}
 	if c.Judge.BatchSize <= 0 {
 		return fmt.Errorf("config: judge.batch_size must be positive")
+	}
+	return nil
+}
+
+// checkPatterns guards the lists the matchers walk. A blank entry is worse than
+// a missing list: "" matches at every offset, so one stray dash in rules.yaml
+// makes its feature fire on every segment of every page, silently.
+func checkPatterns(lists map[string][]string) error {
+	for name, list := range lists {
+		if len(list) == 0 {
+			return fmt.Errorf("config: %s is empty", name)
+		}
+		for i, p := range list {
+			if strings.TrimSpace(p) == "" {
+				return fmt.Errorf("config: %s[%d] is empty", name, i)
+			}
+		}
 	}
 	return nil
 }

@@ -231,3 +231,23 @@ func TestRequestShape(t *testing.T) {
 		t.Errorf("stream = %v, want false", req["stream"])
 	}
 }
+
+// A model that failed once will not answer the next batch either, and each
+// attempt costs the full timeout while the reader waits for the document.
+func TestFailedBatchStopsTheRound(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "model not found", http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	j := New(config.Judge{Endpoint: srv.URL, Model: "test", Timeout: time.Second, BatchSize: 1})
+	j.Log = slog.New(slog.DiscardHandler)
+	if got := j.Decide("", segs("s1", "s2", "s3", "s4")); len(got) != 0 {
+		t.Errorf("got %v, want nothing from an unusable judge", got)
+	}
+	if calls != 1 {
+		t.Errorf("requests = %d, want 1: the round ends at the first failure", calls)
+	}
+}

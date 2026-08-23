@@ -18,7 +18,8 @@ l1:
     - perplexity
     - copilot
     - llm
-    - ai assistant
+    - assistant
+    - language model
     - языковая модель
 
 l2:
@@ -80,7 +81,6 @@ l2:
       - оформить заказ
       - купить
       - по ссылке
-      - успей
     urgency_words:
       - limited time
       - today only

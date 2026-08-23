@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -210,5 +211,42 @@ func TestSharedClientAgainstLiveServer(t *testing.T) {
 	}
 	if _, ok := c.Lookup(store.Hash("совершенно другой сегмент")); ok {
 		t.Error("client took a decoy for a verdict")
+	}
+}
+
+// The probes must not depend on the database: a slow gauge query turning into
+// a failed liveness check would restart the pod over a late scrape.
+func TestHealthzIsStatic(t *testing.T) {
+	st := newTestStore(t)
+	mux := testMux(st)
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d on a closed database, want 200", w.Code)
+	}
+}
+
+// A bucket has no natural ceiling: the write endpoint takes any well-formed
+// hash, so the prefix a client asks for is the prefix an attacker can fill.
+func TestBucketIsCapped(t *testing.T) {
+	st := newTestStore(t)
+	const prefix = "beef"
+	for i := 0; i < maxBucket+10; i++ {
+		hash := prefix + strings.Repeat("0", 56) + fmt.Sprintf("%04x", i)
+		if err := st.put(core.BucketEntry{Hash: hash, Verdict: core.Drop, Source: core.SourceRules}, core.NormVersion); err != nil {
+			t.Fatalf("put: %v", err)
+		}
+	}
+
+	entries, err := st.Bucket(prefix, core.NormVersion)
+	if err != nil {
+		t.Fatalf("Bucket: %v", err)
+	}
+	if len(entries) != maxBucket {
+		t.Errorf("entries = %d, want the response capped at %d", len(entries), maxBucket)
 	}
 }

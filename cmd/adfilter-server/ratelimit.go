@@ -7,15 +7,18 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/time/rate"
 )
 
 const (
-	// Writes are batched: a client submits its outbox at most a few times a
-	// day, so a sustained rate this low still never blocks an honest install.
+	// A token is one verdict, not one request. Writes are batched: a client
+	// submits its outbox at most a few times a day, so a burst that swallows a
+	// whole batch never blocks an honest install, and the sustained rate still
+	// caps what a flood can claim.
 	writesPerSecond = 1
-	writeBurst      = 20
+	writeBurst      = maxBatch
 	maxTrackedIPs   = 4096
 )
 
@@ -59,13 +62,25 @@ func clientIP(r *http.Request, trusted []netip.Prefix) string {
 		return host
 	}
 	if !isTrusted(peer, trusted) {
-		return peer.Unmap().String()
+		return limitKey(peer)
 	}
 	fwd, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("CF-Connecting-IP")))
 	if err != nil {
-		return peer.Unmap().String()
+		return limitKey(peer)
 	}
-	return fwd.Unmap().String()
+	return limitKey(fwd)
+}
+
+// limitKey is the unit a write limit applies to. An IPv4 host is one address,
+// but the smallest IPv6 allocation a home connection gets is a /64 — keying on
+// the /128 would let one subscriber walk 2^64 fresh token buckets, and walking
+// past maxTrackedIPs also clears the buckets of everyone else.
+func limitKey(addr netip.Addr) string {
+	addr = addr.Unmap()
+	if addr.Is6() {
+		return netip.PrefixFrom(addr, 64).Masked().String()
+	}
+	return addr.String()
 }
 
 func isTrusted(addr netip.Addr, trusted []netip.Prefix) bool {
@@ -112,7 +127,12 @@ func newLimiter(r rate.Limit, burst int) *limiter {
 	return &limiter{rate: r, burst: burst, seen: map[string]*rate.Limiter{}}
 }
 
-func (l *limiter) allow(ip string) bool {
+func (l *limiter) allow(ip string) bool { return l.allowN(ip, 1) }
+
+func (l *limiter) allowN(ip string, n int) bool {
+	if n <= 0 {
+		return true
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -120,11 +140,18 @@ func (l *limiter) allow(ip string) bool {
 	if !ok {
 		if len(l.seen) >= maxTrackedIPs {
 			l.prune()
+			// Every tracked bucket is still spending: the map is full of live
+			// state and pruning freed nothing. Forgetting all of it hands back
+			// one burst each, which is cheaper than growing without a bound
+			// while a flood of fresh addresses turns every write into a scan.
+			if len(l.seen) >= maxTrackedIPs {
+				clear(l.seen)
+			}
 		}
 		lim = rate.NewLimiter(l.rate, l.burst)
 		l.seen[ip] = lim
 	}
-	return lim.Allow()
+	return lim.AllowN(time.Now(), n)
 }
 
 // prune drops the entries that carry no state: a full bucket is identical to a

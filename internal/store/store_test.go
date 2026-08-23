@@ -109,6 +109,42 @@ func TestReopenKeepsData(t *testing.T) {
 	}
 }
 
+// The timestamp dates the evidence, and L3 reads the score right after Visit:
+// if a clean visit refreshed it, decay would always see an age of zero and
+// half_life_days would be config with no effect.
+func TestCleanVisitKeepsEvidenceAge(t *testing.T) {
+	s := open(t)
+	if err := s.Visit("promo.example", 2); err != nil {
+		t.Fatalf("Visit: %v", err)
+	}
+	old := time.Now().AddDate(0, 0, -90).Unix()
+	if _, err := s.db.Exec(`UPDATE domains SET updated_at = ?`, old); err != nil {
+		t.Fatalf("age the row: %v", err)
+	}
+
+	if err := s.Visit("promo.example", 0); err != nil {
+		t.Fatalf("Visit: %v", err)
+	}
+	got, err := s.Domain("promo.example")
+	if err != nil {
+		t.Fatalf("Domain: %v", err)
+	}
+	if got.UpdatedAt.Unix() != old {
+		t.Errorf("UpdatedAt = %v, want the age of the last finding", got.UpdatedAt)
+	}
+
+	if err := s.Visit("promo.example", 1); err != nil {
+		t.Fatalf("Visit: %v", err)
+	}
+	got, err = s.Domain("promo.example")
+	if err != nil {
+		t.Fatalf("Domain: %v", err)
+	}
+	if time.Since(got.UpdatedAt) > time.Minute {
+		t.Errorf("UpdatedAt = %v, want now: a visit with findings dates itself", got.UpdatedAt)
+	}
+}
+
 func TestVisitCounts(t *testing.T) {
 	s := open(t)
 	if got, err := s.Domain("habr.com"); err != nil || got.Visits != 0 {
