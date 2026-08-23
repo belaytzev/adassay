@@ -1,8 +1,12 @@
 package extract
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 
 	"adassay.com/internal/config"
 )
@@ -145,5 +149,61 @@ func TestNormalizeDomain(t *testing.T) {
 		if got := NormalizeDomain(in); got != want {
 			t.Errorf("NormalizeDomain(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestSegmentLinksComeFromRawDOM(t *testing.T) {
+	page, err := os.ReadFile(filepath.Join("testdata", "thirstybear.html"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	res, err := Extract(page, "https://www.thirstybear.com/best-monitors-for-programming/", testCfg(t))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	commercial, withLinks := 0, 0
+	for _, s := range res.Segments {
+		if len(s.Links) > 0 {
+			withLinks++
+		}
+		for _, l := range s.Links {
+			if strings.Contains(l.Rel, "sponsored") && strings.Contains(l.Href, "tag=thirstybear07-20") {
+				commercial++
+				break
+			}
+		}
+	}
+	if commercial == 0 {
+		t.Fatal("no segment carries the sponsored affiliate links present in the raw document")
+	}
+	if withLinks == len(res.Segments) {
+		t.Fatalf("every one of %d segments got links: matching is too loose", len(res.Segments))
+	}
+	if commercial > len(res.Segments)/4 {
+		t.Fatalf("%d of %d segments look sponsored: matching is too loose", commercial, len(res.Segments))
+	}
+}
+
+func TestRawScanKeysLinksByBlockText(t *testing.T) {
+	const doc = `<html><body>
+<ul><li><a href="#anchor">Acme Widget</a></li></ul>
+<h3><a href="https://shop.example/p?tag=aff-7" rel="nofollow sponsored">Acme Widget</a></h3>
+<p>Unrelated prose without any link at all.</p>
+</body></html>`
+	root, err := html.Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	idx, visible := rawScan(root)
+	if visible == 0 {
+		t.Fatal("visible text not counted")
+	}
+	got := idx["Acme Widget"]
+	if len(got) != 2 {
+		t.Fatalf("links for %q = %+v, want the list anchor and the sponsored one", "Acme Widget", got)
+	}
+	if _, ok := idx["Unrelated prose without any link at all."]; ok {
+		t.Error("a block without links must not be indexed")
 	}
 }
