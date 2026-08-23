@@ -76,6 +76,11 @@ publishers reject anything else outright, and the point is to look like the brow
 reader would have used, not to hide. There is one identity, it never rotates, and a refusal
 is never retried.
 
+Exit code `4` means the extraction is implausible: the raw page carries far more visible text
+than the reader managed to keep, so the article was probably rendered by JavaScript or hidden
+behind a wall. The `thin` and `visible` fields of the JSON `Result` carry the same signal. It
+lets a caller tell "the page had nothing to say" from "we failed to read the page".
+
 A human vote overrides every layer. It lands in the local database as `human` — the next run
 picks the correction up straight away — and travels to the shared database:
 

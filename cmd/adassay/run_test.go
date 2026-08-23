@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,6 +51,32 @@ func TestRunJSONFromStdin(t *testing.T) {
 	}
 	if len(res.Segments) < 2 {
 		t.Errorf("want at least 2 segments, got %d", len(res.Segments))
+	}
+}
+
+func TestRunThinExtractionIsReported(t *testing.T) {
+	var nav strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&nav, `<li><a href="/c/%d">Best wireless earbuds for running in %d reviewed by our editors</a></li>`, i, 2000+i)
+	}
+	page := `<html><body><nav><ul>` + nav.String() + `</ul></nav><article><h1>The 6 Best Wireless Earbuds</h1>
+<p>909 headphones bought and tested. Supported by you via membership, and when you purchase through links on our site, we may earn an affiliate commission.</p>
+</article></body></html>`
+
+	var out bytes.Buffer
+	err := run(offline("--json"), strings.NewReader(page), &out)
+	if !errors.Is(err, errThin) {
+		t.Fatalf("want errThin, got %v", err)
+	}
+	var res core.Result
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v\n%s", err, out.String())
+	}
+	if !res.Thin {
+		t.Error("Result.Thin not set on a page whose article was lost")
+	}
+	if err := run(offline(), strings.NewReader(cleanPage), &out); err != nil {
+		t.Errorf("a fully extracted page must not be reported as thin: %v", err)
 	}
 }
 

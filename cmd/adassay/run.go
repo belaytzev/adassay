@@ -17,7 +17,10 @@ import (
 	"adassay.com/internal/store"
 )
 
-var errInjection = errors.New("hidden text found")
+var (
+	errInjection = errors.New("hidden text found")
+	errThin      = errors.New("extraction looks incomplete")
+)
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	if len(args) > 0 {
@@ -100,6 +103,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	if len(res.Hidden) > 0 {
 		return fmt.Errorf("adassay: %w: %d finding(s)", errInjection, len(res.Hidden))
+	}
+	if res.Thin {
+		return fmt.Errorf("adassay: %w: %d segment(s), %d of %d visible characters kept", errThin, len(res.Segments), len([]rune(res.Text)), res.Visible)
 	}
 	return nil
 }

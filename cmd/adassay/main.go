@@ -19,6 +19,9 @@ func main() {
 	case errors.Is(err, fetch.ErrBlocked):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(3)
+	case errors.Is(err, errThin):
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(4)
 	default:
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

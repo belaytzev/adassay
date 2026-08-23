@@ -17,12 +17,21 @@ import (
 func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 	type l1 struct {
 		findings []core.Finding
+		links    map[string][]core.Link
+		visible  int
 		err      error
 	}
 	done := make(chan l1, 1)
 	go func() {
-		f, err := Hidden(bytes.NewReader(page), cfg)
-		done <- l1{f, err}
+		doc, err := html.Parse(bytes.NewReader(page))
+		if err != nil {
+			done <- l1{err: err}
+			return
+		}
+		var findings []core.Finding
+		walk(doc, cfg, &findings)
+		links, visible := rawScan(doc)
+		done <- l1{findings: dedupe(findings), links: links, visible: visible}
 	}()
 
 	var base *url.URL
@@ -30,27 +39,88 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 		base, _ = url.Parse(pageURL)
 	}
 	art, err := readability.FromReader(bytes.NewReader(page), base)
-	hidden := <-done
+	raw := <-done
 
 	if err != nil {
 		return core.Result{}, fmt.Errorf("extract: %w", err)
 	}
-	if hidden.err != nil {
-		return core.Result{}, fmt.Errorf("extract: l1: %w", hidden.err)
+	if raw.err != nil {
+		return core.Result{}, fmt.Errorf("extract: l1: %w", raw.err)
 	}
 
-	segs := segment(art.Node)
+	segs := segment(art.Node, raw.links)
 	texts := make([]string, len(segs))
 	for i, s := range segs {
 		texts[i] = s.Text
 	}
+	text := strings.Join(texts, "\n\n")
 	return core.Result{
 		Title:    art.Title,
-		Text:     strings.Join(texts, "\n\n"),
+		Text:     text,
 		Segments: segs,
-		Hidden:   hidden.findings,
+		Hidden:   raw.findings,
 		Domain:   NormalizeDomain(pageURL),
+		Visible:  raw.visible,
+		Thin:     thin(text, raw.visible),
 	}, nil
+}
+
+const (
+	minVisible = 500
+	thinFactor = 4
+)
+
+func thin(text string, visible int) bool {
+	return visible >= minVisible && thinFactor*len([]rune(text)) < visible
+}
+
+func rawScan(root *html.Node) (map[string][]core.Link, int) {
+	idx := map[string][]core.Link{}
+	visible := 0
+	var rec func(*html.Node)
+	rec = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			visible += len([]rune(collapse(n.Data)))
+			return
+		}
+		if n.Type == html.ElementNode {
+			switch {
+			case n.Data == "script" || n.Data == "style", classify(n) != "":
+				return
+			case isHeading(n.Data):
+				_, links := blockContent(n)
+				index(idx, clean(nodeText(n)), links)
+			case isBlock(n.Data):
+				text, links := blockContent(n)
+				index(idx, clean(text), links)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			rec(c)
+		}
+	}
+	rec(root)
+	return idx, visible
+}
+
+func index(idx map[string][]core.Link, key string, links []core.Link) {
+	if key == "" || len(links) == 0 {
+		return
+	}
+	idx[key] = dedupeLinks(append(idx[key], links...))
+}
+
+func dedupeLinks(links []core.Link) []core.Link {
+	seen := make(map[core.Link]bool, len(links))
+	out := make([]core.Link, 0, len(links))
+	for _, l := range links {
+		if seen[l] {
+			continue
+		}
+		seen[l] = true
+		out = append(out, l)
+	}
+	return out
 }
 
 var blockTags = map[string]bool{
@@ -67,13 +137,14 @@ func isHeading(tag string) bool {
 type segmenter struct {
 	out     []core.Segment
 	pending string
+	raw     map[string][]core.Link
 }
 
-func segment(root *html.Node) []core.Segment {
+func segment(root *html.Node, raw map[string][]core.Link) []core.Segment {
 	if root == nil {
 		return nil
 	}
-	s := &segmenter{}
+	s := &segmenter{raw: raw}
 	s.walk(root)
 	s.emit("", nil)
 	return s.out
@@ -90,12 +161,19 @@ func (s *segmenter) walk(n *html.Node) {
 			return
 		case isBlock(n.Data):
 			text, links := blockContent(n)
-			s.emit(text, links)
+			s.emit(text, s.resolve(clean(text), links))
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		s.walk(c)
 	}
+}
+
+func (s *segmenter) resolve(key string, own []core.Link) []core.Link {
+	if raw := s.raw[key]; len(raw) > 0 {
+		return raw
+	}
+	return own
 }
 
 func (s *segmenter) emit(text string, links []core.Link) {
@@ -110,7 +188,7 @@ func (s *segmenter) emit(text string, links []core.Link) {
 	s.out = append(s.out, core.Segment{
 		ID:    fmt.Sprintf("s%d", len(s.out)+1),
 		Text:  text,
-		Links: links,
+		Links: dedupeLinks(links),
 	})
 }
 
