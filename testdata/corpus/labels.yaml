@@ -190,3 +190,31 @@ pages:
     ads:
       - "Sponsored post. This article was produced in partnershi"
       - "Readers can get three months free with promo code SHIEL"
+  - file: ad_tomsguide_backtoschool.html
+    url: https://www.tomsguide.com/computing/laptops/9-last-minute-back-to-school-laptop-deals-under-usd800-i-recommend-right-now
+    ads:
+      - "One of the best discounts right now is the Lenovo IdeaPa"
+      - "Quick Links Lenovo IdeaPad Slim 3 Chromebook: was $529 n"
+      - "Acer Aspire Go 15 laptop: was $699 now $499 @ Best Buy"
+      - "Dell 15 laptop: was $1,099 now $599 @ Best Buy"
+      - "Acer Chromebook Plus Spin 714: was $799 now $669 @ Best "
+      - "Lenovo IdeaPad Slim 3x: was $1,199 now $699 @ Lenovo"
+      - "Lenovo ThinkBook 14x: was $1,104 now $699 @ Lenovo"
+      - "Apple MacBook Neo: $699 @ Best Buy"
+      - "Dell XPS 13: $699 @ Dell"
+      - "HP OmniBook X Flip: $1,199 now $749 @ Best Buy"
+  - file: ad_cnet_vpn.html
+    url: https://www.cnet.com/tech/services-and-software/best-vpn/
+    ads:
+      - "ExpressVPN is currently the best VPN overall thanks to i"
+      - "NordVPN is an exceptional VPN that gave us the fastest c"
+      - "Surfshark delivers speeds and features comparable to Exp"
+      - "Proton VPN is privacy-forward, with unique features like"
+      - "Mullvad VPN charges a straightforward monthly price and "
+      - "Privacy and transparency Few VPN providers do privacy an"
+      - "Mullvad’s prices are about as straightforward as it gets"
+      - "IPVanish is a decent beginner-friendly VPN for anyone se"
+      - "Norton, long known for excellence in security products, "
+  - file: clean_ars_pixel_review.html
+    url: https://arstechnica.com/gadgets/2026/08/google-pixel-11-series-review-is-the-magic-fading/
+    ads: []
