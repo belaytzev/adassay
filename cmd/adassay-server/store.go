@@ -14,7 +14,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// ponytail: sqlite+WAL, postgres if write contention shows up
 const schema = `
 CREATE TABLE IF NOT EXISTS verdicts (
 	hash         TEXT    NOT NULL,
@@ -30,25 +29,13 @@ CREATE TABLE IF NOT EXISTS verdicts (
 CREATE INDEX IF NOT EXISTS verdicts_bucket ON verdicts (norm_version, prefix);
 `
 
-// statsTTL is how long a metrics scrape may reuse the previous counts. The
-// endpoint is public and doubles as the kubelet probe, while the query behind
-// it scans every verdict: without a ceiling on how often it runs, scraping is
-// the cheapest way to load the database.
 const statsTTL = 30 * time.Second
 
-// maxBucket caps how many verdicts one bucket response may carry. The read
-// endpoint is unauthenticated and takes no token, and nothing bounds how many
-// hashes land under a prefix, so without a ceiling one GET makes the server
-// materialize the whole bucket in memory and the client refuse the answer for
-// exceeding its 1 MiB body limit. Truncation is by hash order, so the set a
-// client sees for a prefix stays stable between lookups.
-// ponytail: fixed cap, paginate if honest buckets ever reach it
 const maxBucket = 1024
 
 type Store struct {
 	db *sql.DB
-	// quorum is how many distinct clients must confirm a verdict before it is
-	// served; tests lower it to keep their fixtures readable.
+
 	quorum int
 	mx     *metrics
 
@@ -63,9 +50,7 @@ func openStore(path string) (*Store, error) {
 			return nil, fmt.Errorf("server: %w", err)
 		}
 	}
-	// _txlock=immediate: submit reads then writes in one transaction, and a
-	// deferred transaction that upgrades after somebody else committed fails
-	// with SQLITE_BUSY_SNAPSHOT, which busy_timeout does not retry.
+
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate")
 	if err != nil {
 		return nil, fmt.Errorf("server: open %s: %w", path, err)
@@ -74,10 +59,7 @@ func openStore(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("server: schema: %w", err)
 	}
-	// CREATE TABLE IF NOT EXISTS leaves a database from before source_rank
-	// untouched, and sqlite has no ADD COLUMN IF NOT EXISTS; ask whether the
-	// column is there rather than reading it off a failed ALTER, so a real
-	// migration failure stops startup instead of passing for "already done".
+
 	var hasRank int
 	if err := db.QueryRow(
 		`SELECT COUNT(*) FROM pragma_table_info('confirmations') WHERE name = 'source_rank'`,
@@ -94,10 +76,6 @@ func openStore(path string) (*Store, error) {
 	return &Store{db: db, quorum: defaultQuorum}, nil
 }
 
-// migrateSourceRank adds the column and backfills it in one transaction.
-// sqlite rolls DDL back with the rest, so a failed backfill leaves the column
-// absent too: committing the ALTER alone would make the next start see the
-// column, skip the backfill, and strand pre-upgrade rows at rank 0.
 func migrateSourceRank(db *sql.DB) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -108,11 +86,7 @@ func migrateSourceRank(db *sql.DB) error {
 	if _, err := tx.Exec(`ALTER TABLE confirmations ADD COLUMN source_rank INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return err
 	}
-	// Rows written before the column carry no source. Left at the default they
-	// rank below everything, so a stale rules batch could retract a vote cast
-	// before the upgrade; the strongest rank costs the opposite and much
-	// cheaper mistake, a machine correction that has to wait for the client to
-	// vote again.
+
 	if _, err := tx.Exec(`UPDATE confirmations SET source_rank = ?`, sourceRank(core.SourceHuman)); err != nil {
 		return err
 	}
@@ -121,9 +95,6 @@ func migrateSourceRank(db *sql.DB) error {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// stats counts what the database holds: verdicts clients can already see, and
-// verdicts still waiting for confirmations. The answer is held for statsTTL,
-// so a scrape storm costs one scan per window.
 func (s *Store) stats() (published, quarantined int, err error) {
 	s.statsMu.Lock()
 	defer s.statsMu.Unlock()
@@ -152,10 +123,6 @@ func (s *Store) countVerdicts() (published, quarantined int, err error) {
 	return published, total - published, nil
 }
 
-// Bucket returns every published verdict whose hash starts with prefix. The
-// prefix is all the server ever learns about what a client is reading. Rows in
-// quarantine are withheld: an unconfirmed verdict is one stranger's claim, and
-// serving it would let that stranger rewrite what every client sees.
 func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, error) {
 	rows, err := s.db.Query(
 		`SELECT v.hash, v.verdict, v.reasons, v.source, v.votes FROM verdicts v
@@ -193,8 +160,6 @@ func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, erro
 	return entries, rows.Err()
 }
 
-// execer and queryer are satisfied by both *sql.DB and *sql.Tx: submit needs
-// its work to happen inside its own transaction, the test seeder does not care.
 type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
@@ -246,8 +211,6 @@ func decodeReasons(s string) []string {
 	return reasons
 }
 
-// sourceRank orders verdict origins: a machine guess must never overturn a
-// human, and a rules match must never overturn the judge.
 func sourceRank(s string) int {
 	switch s {
 	case core.SourceRules:
@@ -260,11 +223,6 @@ func sourceRank(s string) int {
 	return 0
 }
 
-// submit merges one incoming verdict into the database and reports whether it
-// was taken. Agreement adds the client to the verdict's backers; disagreement
-// only rewrites the row once it has itself reached a quorum of distinct
-// clients, and never at all against a published verdict of a stronger source.
-// ponytail: one tally per verdict, per-tier tallies if verdicts start flip-flopping
 func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (accepted bool, votes int, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -283,16 +241,10 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:
 		return false, 0, fmt.Errorf("server: submit: %w", err)
-	// Agreement adds a backer and nothing else. Adopting the submitter's source
-	// would let one client relabel a row as ollama and then have every honest
-	// correction turned away as weaker than the label it just wrote itself.
+
 	case curVerdict == e.Verdict.String():
 		row.Source, row.Reasons = curSource, decodeReasons(curReasons)
-	// The rank rule guards a verdict the crowd already backs, not a claim one
-	// stranger filed: an unconfirmed row stays a challenger's to take, or a
-	// hash nobody else has seen yet would belong forever to whoever wrote it
-	// first under the strongest source they were allowed to name. An equal
-	// rank is a challenger like any other.
+
 	case sourceRank(e.Source) < sourceRank(curSource) && curVotes >= s.quorum:
 		s.mx.diverged()
 		refused = true
@@ -301,9 +253,6 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 		challenger = true
 	}
 
-	// The opinion is recorded even when it cannot move the row: skipping
-	// confirm() here would mean a client turned away once is never counted,
-	// and its side could never accumulate a quorum of its own.
 	if err := confirm(tx, e.Hash, normVersion, clientID, e.Verdict.String(), e.Source); err != nil {
 		return false, 0, err
 	}
@@ -317,10 +266,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 	if err != nil {
 		return false, 0, err
 	}
-	// The contradiction is recorded as this client's opinion and nothing more.
-	// Handing the row over on one stranger's word would drop the incumbent back
-	// into quarantine, which is how a single unauthenticated client could
-	// unpublish every verdict in the database one contradiction at a time.
+
 	if challenger && n < s.quorum {
 		if err := tx.Commit(); err != nil {
 			return false, 0, fmt.Errorf("server: submit: %w", err)

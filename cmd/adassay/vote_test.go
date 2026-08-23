@@ -36,9 +36,6 @@ func TestVoteSendsHashOfText(t *testing.T) {
 	}
 }
 
-// TestVoteReachesCachedVerdict is the point of voting by url: the verdicts a
-// reader wants overturned are the ones an authority above the rules produced,
-// and re-running the rules alone would never put them on the ballot.
 func TestVoteReachesCachedVerdict(t *testing.T) {
 	const text = "Water just off the boil, around ninety four degrees, keeps the bitterness down while still pulling enough of the sweetness out of a medium roast."
 
@@ -59,8 +56,7 @@ func TestVoteReachesCachedVerdict(t *testing.T) {
 
 	var votes []core.VoteRequest
 	share := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The same endpoint answers the pipeline's bucket lookups; only the
-		// votes are of interest here.
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "{}", http.StatusNotFound)
 			return
@@ -94,9 +90,6 @@ func TestVoteReachesCachedVerdict(t *testing.T) {
 	t.Fatalf("cached drop never reached the ballot, votes: %+v", votes)
 }
 
-// A vote takes effect for the reader who cast it right away: overturning the
-// shared database needs a quorum of installations, and until it forms the local
-// run must already reflect the correction.
 func TestVoteOverridesLocally(t *testing.T) {
 	const text = "Use code SAVE20 at checkout for our sponsor."
 	db := filepath.Join(t.TempDir(), "verdicts.db")
@@ -140,9 +133,6 @@ func TestVoteRejectsAmbiguousFlags(t *testing.T) {
 	}
 }
 
-// The documented form puts the target first: `adassay vote <text> --ad`. Go's
-// flag package stops at the first non-flag, so without interleaved parsing every
-// flag after the target — the verdict included — would be read as an argument.
 func TestVoteAcceptsFlagsAfterTarget(t *testing.T) {
 	const text = "Use code SAVE20 at checkout for our sponsor."
 	t.Setenv(share.EnvEndpoint, "")
@@ -167,9 +157,6 @@ func TestVoteAcceptsFlagsAfterTarget(t *testing.T) {
 	}
 }
 
-// Without a shared database the vote is still the reader's override of the
-// local one: the install that shares nothing is the default install, and there
-// the human source would otherwise be unreachable from every command.
 func TestVoteWithoutEndpointStaysLocal(t *testing.T) {
 	const text = "Use code SAVE20 at checkout for our sponsor."
 	t.Setenv(share.EnvEndpoint, "")
@@ -197,8 +184,6 @@ func TestVoteWithoutEndpointStaysLocal(t *testing.T) {
 	}
 }
 
-// A queued drop for the same hash must not survive the vote: the backend keeps
-// one opinion per client per hash, so a later flush would undo the correction.
 func TestVoteClearsQueuedVerdict(t *testing.T) {
 	const text = "Use code SAVE20 at checkout for our sponsor."
 	db := filepath.Join(t.TempDir(), "verdicts.db")

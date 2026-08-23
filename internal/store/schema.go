@@ -7,7 +7,6 @@ import (
 	"adassay.com/internal/core"
 )
 
-// ponytail: schema recreated per version, real migrations when the format churns
 const schema = `
 CREATE TABLE IF NOT EXISTS verdicts (
 	hash         BLOB    NOT NULL,
@@ -43,8 +42,7 @@ func migrate(db *sql.DB) error {
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("store: schema: %w", err)
 	}
-	// user_version records the normalization the file was written with; a bump
-	// leaves the old rows in place but they are addressed by a different key.
+
 	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", core.NormVersion)); err != nil {
 		return fmt.Errorf("store: user_version: %w", err)
 	}

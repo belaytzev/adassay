@@ -1,5 +1,3 @@
-// Command adassay strips advertising and hidden injections from a page and
-// prints what is left as markdown or JSON.
 package main
 
 import (

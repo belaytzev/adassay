@@ -19,9 +19,6 @@ import (
 
 const hashLen = 64
 
-// vote is the human override against the shared database. A hash corrects one
-// segment; a url corrects a page, voting on everything the filter did not keep
-// — those are the calls a reader is in a position to confirm or deny.
 func vote(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("adassay vote", flag.ContinueOnError)
 	fs.SetOutput(stdout)
@@ -45,8 +42,6 @@ func vote(args []string, stdout io.Writer) error {
 		return fmt.Errorf("adassay vote: want one url or hash, got %d arguments", len(rest))
 	}
 
-	// A missing endpoint is not an error: the correction the reader cares about
-	// is the local one, and an install without a shared database is the default.
 	client := share.New(*endpoint)
 	verdict := core.Keep
 	if *isAd {
@@ -57,24 +52,17 @@ func vote(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// The correction lands locally first. A vote reaches everybody else only
-	// once a quorum of installations agrees with it, and until then the reader
-	// who sent it would keep seeing the verdict they just told us was wrong.
+
 	local, err := store.Open(*dbPath)
 	if err != nil {
 		return err
 	}
 	defer local.Close()
-	// Anything queued for these hashes is now stale. The backend keeps one
-	// opinion per client per hash, so a later flush would overwrite this vote
-	// with what the rules thought before the reader corrected them.
+
 	if err := local.ClearPending(hashes); err != nil {
 		return err
 	}
-	// Every local correction lands before the first request goes out: a page
-	// vote is many hashes, and giving up halfway through the network half
-	// would leave the rest of the page uncorrected on the reader's own machine
-	// — with the queued verdicts for all of them already cleared.
+
 	for _, h := range hashes {
 		raw, err := hex.DecodeString(h)
 		if err != nil {
@@ -101,14 +89,6 @@ func vote(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// targets turns the argument into the hashes to vote on: a hash is itself, a
-// url is fetched and filtered, and anything else is treated as segment text.
-//
-// The page is run through the same pipeline as `adassay <url>`, cache and
-// shared database included. A vote exists to correct a verdict the reader saw,
-// and the verdicts worth correcting — one adopted from the shared database, one
-// the judge made, one L3 pushed over the line — are exactly the ones the rules
-// alone would not reproduce.
 func targets(arg, cfgPath, dbPath string, client *share.Client) ([]string, error) {
 	if isHash(arg) {
 		return []string{strings.ToLower(arg)}, nil
@@ -134,8 +114,7 @@ func targets(arg, cfgPath, dbPath string, client *share.Client) ([]string, error
 		return nil, err
 	}
 	defer s.Close()
-	// Not a Visit: voting on a page is a correction, not a reading of it, and
-	// counting it twice would charge the domain for the same visit again.
+
 	res, err = (&pipeline.Pipeline{Cfg: cfg, Cache: s, Shared: client, Judge: judge.New(cfg.Judge)}).Run(res)
 	if err != nil {
 		return nil, err

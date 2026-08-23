@@ -14,9 +14,6 @@ import (
 	"adassay.com/internal/core"
 )
 
-// Extract turns a page into segments. L1 runs on the raw markup at the same
-// time: extraction is precisely what throws hidden nodes away, so the detector
-// has to see the page before readability does.
 func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 	type l1 struct {
 		findings []core.Finding
@@ -72,9 +69,6 @@ type segmenter struct {
 	pending string
 }
 
-// segment splits extracted content into scoring units: a paragraph or a list
-// item is one segment, and a heading rides on the block that follows it —
-// alone it carries too little text to judge, but it frames what comes next.
 func segment(root *html.Node) []core.Segment {
 	if root == nil {
 		return nil
@@ -120,8 +114,6 @@ func (s *segmenter) emit(text string, links []core.Link) {
 	})
 }
 
-// blockContent reads a block's own text and links, stopping at nested blocks so
-// that a list item inside a list item stays a segment of its own.
 func blockContent(n *html.Node) (string, []core.Link) {
 	var b strings.Builder
 	var links []core.Link
@@ -156,11 +148,6 @@ func clean(s string) string {
 	return collapse(strings.Map(dropPadding, s))
 }
 
-// dropPadding removes invisible padding from text the agent will read, but keeps
-// ZWNJ and ZWJ: they are spelling in Persian, Urdu and Hindi and are what holds
-// an emoji sequence together. Stripping them here would corrupt the document the
-// filter exists to hand over intact — the hash space strips them separately, in
-// store.Normalize.
 func dropPadding(r rune) rune {
 	if r == 0x200C || r == 0x200D {
 		return r
@@ -168,9 +155,6 @@ func dropPadding(r rune) rune {
 	return dropInvisible(r)
 }
 
-// NormalizeDomain reduces a URL or a bare host to the key the domain score is
-// kept under: punycode, no www, lower case. Subdomains stay — a blog platform
-// and its user subdomains are not the same source.
 func NormalizeDomain(s string) string {
 	host := strings.TrimSpace(s)
 	if u, err := url.Parse(host); err == nil && u.Host != "" {

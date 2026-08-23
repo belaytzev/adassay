@@ -13,8 +13,6 @@ import (
 	"adassay.com/internal/store"
 )
 
-// adText fires disclaimer + affiliate_link, which is a configured shortcut to
-// Drop — anything the cache does to this segment is visible in the verdict.
 const adText = "Sponsored post: our favourite grinder of the year, on sale this week."
 
 var adLinks = []core.Link{{Href: "https://awin1.com/cread.php?p=42", Text: "buy it"}}
@@ -110,7 +108,6 @@ func TestVerdictPriority(t *testing.T) {
 		}
 	}
 
-	// Every source above the rules takes the decision away from them.
 	for _, src := range []string{core.SourceOllama, core.SourceShared, core.SourceHuman} {
 		cache := newCache()
 		cache.put(adText, store.Record{Verdict: core.Keep, Source: src})
@@ -122,8 +119,6 @@ func TestVerdictPriority(t *testing.T) {
 		}
 	}
 
-	// A cached rules verdict is our own past output, not an authority: it is
-	// re-scored, and the fresh verdict wins.
 	cache := newCache()
 	cache.put(adText, store.Record{Verdict: core.Keep, Source: core.SourceRules})
 	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Log: quiet()}
@@ -136,8 +131,7 @@ func TestVerdictPriority(t *testing.T) {
 
 func TestDomainNeverDropsAlone(t *testing.T) {
 	cfg := testConfig(t)
-	// One feature fires and leaves the segment below lo, and the shift is wide
-	// enough to clear hi on its own: only the one-step cap keeps it out of Drop.
+
 	cfg.L2.Hi, cfg.L2.Lo = 0.35, 0.3
 	cfg.L3.MaxShift = 1
 
@@ -165,9 +159,6 @@ func TestDomainNeverDropsAlone(t *testing.T) {
 	}
 }
 
-// The default thresholds sit close enough to the empty score that a shift on a
-// distrusted domain would carry every plain paragraph over lo. A document
-// flagged whole tells the agent exactly as much as one not flagged at all.
 func TestDomainDoesNotFlagPlainSegments(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.L3.MaxShift = 1
@@ -415,9 +406,6 @@ func TestSharedDivergenceIsCounted(t *testing.T) {
 	}
 }
 
-// Adopted names the segments this run did not decide. The outbox reads it to
-// keep a verdict that came from elsewhere from being submitted back as a fresh
-// derivation, which would turn every reader into another confirming vote.
 func TestAdoptedMarksVerdictsTakenFromElsewhere(t *testing.T) {
 	shared := &fakeShared{}
 	shared.put(adText, core.BucketEntry{Verdict: core.Drop, Source: core.SourceRules, Reasons: []string{"disclaimer"}})

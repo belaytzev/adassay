@@ -1,5 +1,3 @@
-// Package core holds the domain types and the wire contract shared by the CLI,
-// the MCP server, the shared-database client and the backend.
 package core
 
 import (
@@ -71,10 +69,6 @@ func ParseVerdict(s string) (Verdict, error) {
 	return v, nil
 }
 
-// MaxReason bounds a reason, and ValidReason holds on both sides of the wire:
-// the backend refuses anything else on write, and the renderer refuses to put
-// anything else in a marker. Reasons are rule identifiers — the one field wide
-// enough to carry article text or marker syntax if left free-form.
 const MaxReason = 48
 
 func ValidReason(r string) bool {
@@ -113,8 +107,6 @@ type Result struct {
 	Domain      string    `json:"domain"`
 }
 
-// Link keeps the markup a segment was built from: rel and href are what the L2
-// rules read, and they are gone once the segment is plain text.
 type Link struct {
 	Href string `json:"href"`
 	Rel  string `json:"rel,omitempty"`

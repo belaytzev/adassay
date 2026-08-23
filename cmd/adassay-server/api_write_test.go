@@ -54,8 +54,6 @@ func submit(t *testing.T, st *Store, entries ...core.SubmitEntry) core.SubmitRes
 	return resp
 }
 
-// stored returns the row the bucket endpoint reports for hash, which is the
-// only view a client ever gets.
 func stored(t *testing.T, st *Store, hash string) core.BucketEntry {
 	t.Helper()
 	bucket := decodeBucket(t, get(t, st, bucketPath(hash[:core.PrefixLen], core.NormVersion)))
@@ -123,9 +121,6 @@ func vote(t *testing.T, st *Store, hash string, verdict core.Verdict) core.VoteR
 	return resp
 }
 
-// A human verdict outranks everything, so the batch endpoint must not carry
-// one: /v1/segments would let a single request overturn maxBatch verdicts,
-// while /v1/vote costs one request per hash.
 func TestSubmitRejectsHumanSource(t *testing.T) {
 	st := newTestStore(t)
 	hash := store.HexHash("не человек это писал")
@@ -140,8 +135,6 @@ func TestSubmitRejectsHumanSource(t *testing.T) {
 	}
 }
 
-// A vote agrees with what is stored and carries no reasons of its own. Taking
-// its empty list would strip the verdict of the only explanation it has.
 func TestVoteKeepsExistingReasons(t *testing.T) {
 	st := newTestStore(t)
 	hash := store.HexHash("причины переживают голос")
@@ -153,8 +146,6 @@ func TestVoteKeepsExistingReasons(t *testing.T) {
 	}
 }
 
-// SourceRules < SourceOllama < SourceHuman: a weaker origin must not be able to
-// overturn a verdict a stronger one produced.
 func TestSubmitWeighsBySource(t *testing.T) {
 	st := newTestStore(t)
 
@@ -194,10 +185,6 @@ func TestSubmitWeighsBySource(t *testing.T) {
 		}
 	})
 
-	// Inside a tier the row belongs to whoever wrote it first, but only until
-	// an equal-rank verdict gathers a quorum of its own. Turning the
-	// disagreement away instead would let one stranger's claim on a hash block
-	// the honest verdict for good.
 	t.Run("equal rank takes its own quorum", func(t *testing.T) {
 		st := newTestStore(t)
 		st.quorum = 2
@@ -234,7 +221,7 @@ func TestSubmitRejectsBadRequests(t *testing.T) {
 		{"foreign norm version", `{"client_id":"` + testClient + `","norm_version":` + strconv.Itoa(core.NormVersion+1) + `,"entries":[` + entry + `]}`},
 		{"missing client id", `{"norm_version":` + strconv.Itoa(core.NormVersion) + `,"entries":[` + entry + `]}`},
 		{"malformed client id", `{"client_id":"nope","norm_version":` + strconv.Itoa(core.NormVersion) + `,"entries":[` + entry + `]}`},
-		// Right length, no work behind it: a quorum of these costs nothing.
+
 		{"client id of dashes", `{"client_id":"------------------------------------","norm_version":` + strconv.Itoa(core.NormVersion) + `,"entries":[` + entry + `]}`},
 		{"empty batch", envelope(`"entries":[]`)},
 		{"unknown verdict", envelope(`"entries":[{"hash":"` + hash + `","verdict":"burn","source":"rules"}]`)},
@@ -255,8 +242,6 @@ func TestSubmitRejectsBadRequests(t *testing.T) {
 	}
 }
 
-// Entry-level junk is counted, not fatal: one bad row must not throw away a
-// batch that is otherwise fine.
 func TestSubmitRejectsBadEntries(t *testing.T) {
 	st := newTestStore(t)
 	good := store.HexHash("нормальный сегмент")
@@ -282,11 +267,6 @@ func TestSubmitRejectsBadEntries(t *testing.T) {
 	}
 }
 
-// spool captures what a client would queue, so the real outbox output can be
-// posted to the real handler. Nothing crossed that boundary in a test before,
-// and the two sides disagreed about reason syntax: the client prefixed hidden
-// findings with "hidden:", the server accepts rule identifiers only, and every
-// such entry was dropped behind an HTTP 200.
 type spool struct{ entries []core.SubmitEntry }
 
 func (s *spool) Enqueue(e core.SubmitEntry) error { s.entries = append(s.entries, e); return nil }
@@ -323,8 +303,6 @@ func TestOutboxEntriesSurviveServerValidation(t *testing.T) {
 	}
 }
 
-// The database keeps hashes, verdicts and rule identifiers. Nothing that could
-// carry readable text may reach the file, in any field.
 func TestSubmitStoresNoText(t *testing.T) {
 	st := newTestStore(t)
 	const secret = "Материал подготовлен при поддержке партнёра"
@@ -431,9 +409,6 @@ func TestVoteRejectsBadRequests(t *testing.T) {
 	}
 }
 
-// A vote is the only correction the database has against a wrong verdict, so
-// it has to work against a wrong vote too: rejecting an equal source would
-// make the first human verdict on a hash permanent.
 func TestVoteOverturnsEarlierVote(t *testing.T) {
 	st := newTestStore(t)
 	hash := store.HexHash("первый голос ошибся")

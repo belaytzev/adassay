@@ -27,9 +27,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 		writeError(w, http.StatusBadRequest, "entries must hold between 1 and "+strconv.Itoa(maxBatch)+" verdicts")
 		return
 	}
-	// The limiter outside already charged one token for the request. What it
-	// cannot see is that a request carries up to maxBatch verdicts: without
-	// charging for the rest, a batch multiplies the write rate by maxBatch.
+
 	if !g.lim.allowN(clientIP(r, g.trusted), len(req.Entries)-1) {
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, "too many writes from this address")
@@ -58,9 +56,6 @@ func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// handleVote is the human override: a vote outranks anything the rules or the
-// judge decided, which is the only correction the shared database has against
-// a heuristic that is confidently wrong everywhere at once.
 func handleVote(w http.ResponseWriter, r *http.Request, st *Store) {
 	var req core.VoteRequest
 	if !decodeBody(w, r, &req) {
@@ -92,9 +87,6 @@ func handleVote(w http.ResponseWriter, r *http.Request, st *Store) {
 	writeJSON(w, http.StatusOK, core.VoteResponse{Hash: req.Hash, Votes: votes})
 }
 
-// decodeBody refuses anything that is not exactly the wire type. The decoder
-// error is never echoed or logged: a rejected body may carry the very text the
-// database exists to keep out.
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
 	dec.DisallowUnknownFields()
@@ -122,11 +114,7 @@ func checkEnvelope(w http.ResponseWriter, normVersion int, clientID string) bool
 }
 
 func validEntry(e core.SubmitEntry) bool {
-	// SourceShared would be the database quoting itself back: one client's
-	// lookup becomes a second vote for a verdict nobody re-derived. SourceHuman
-	// outranks everything, so accepting it here would let one batch overturn
-	// 256 verdicts at once — a human correction goes through /v1/vote, one
-	// hash per request.
+
 	if !core.ValidSource(e.Source) || e.Source == core.SourceShared || e.Source == core.SourceHuman {
 		return false
 	}
@@ -145,9 +133,6 @@ func validHash(h string) bool {
 	return len(h) == 64 && strings.Trim(h, hexDigits) == ""
 }
 
-// validClientID checks the shape of a UUID, dashes in their places included:
-// without the positions "------------------------------------" would pass and
-// a quorum could be reached with identifiers nobody had to generate.
 func validClientID(id string) bool {
 	if len(id) != 36 {
 		return false

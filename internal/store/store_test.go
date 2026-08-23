@@ -70,8 +70,7 @@ func TestLookupIsScopedToNormVersion(t *testing.T) {
 	if err := s.Upsert(Record{Hash: hash, Verdict: core.Drop, Source: core.SourceRules}); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
-	// A row written under another normalization version must not answer a
-	// current-version lookup, and must not be overwritten by one either.
+
 	if _, err := s.db.Exec(
 		`INSERT INTO verdicts (hash, norm_version, verdict, reasons, source, votes, seen, updated)
 		 VALUES (?, ?, 'keep', '', 'rules', 0, 1, ?)`,
@@ -109,9 +108,6 @@ func TestReopenKeepsData(t *testing.T) {
 	}
 }
 
-// The timestamp dates the evidence, and L3 reads the score right after Visit:
-// if a clean visit refreshed it, decay would always see an age of zero and
-// half_life_days would be config with no effect.
 func TestCleanVisitKeepsEvidenceAge(t *testing.T) {
 	s := open(t)
 	if err := s.Visit("promo.example", 2); err != nil {
@@ -198,8 +194,7 @@ func TestOutboxRoundTrip(t *testing.T) {
 			t.Fatalf("enqueue: %v", err)
 		}
 	}
-	// The same segment seen twice is one row: a duplicate would inflate the
-	// batch and say more about this reader than about the segment.
+
 	if err := s.Enqueue(entries[0]); err != nil {
 		t.Fatalf("enqueue again: %v", err)
 	}

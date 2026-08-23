@@ -67,9 +67,6 @@ func TestRunInjectionExitsNonZero(t *testing.T) {
 	}
 }
 
-// --verbose prints the injection it just caught. The sample is hostile text,
-// so it must reach stdout as one defused line: otherwise reporting the find
-// hands the agent the payload, marker syntax included.
 func TestVerboseSampleCannotForgeMarkers(t *testing.T) {
 	page := `<html><body><article>
 <h1>Coffee brewing</h1>
@@ -153,15 +150,10 @@ func TestRunFetchStatusError(t *testing.T) {
 	}
 }
 
-// offline prepends the config that keeps a test run from reaching a local
-// model; every CLI test goes through it.
 func offline(args ...string) []string {
 	return append([]string{"--config", filepath.Join("testdata", "offline.yaml")}, args...)
 }
 
-// TestMain keeps the CLI tests off whatever the developer has configured: an
-// ambient $ADASSAY_SHARE_URL would send the fixtures to a real backend and a
-// real database path would outlive the test.
 func TestMain(m *testing.M) {
 	os.Setenv(share.EnvEndpoint, "")
 	os.Setenv(share.EnvOptOut, "1")

@@ -29,7 +29,6 @@ func (f *fakeSpool) Pending() ([]core.SubmitEntry, time.Time, error) {
 
 func (f *fakeSpool) ClearPending(hashes []string) error { f.cleared = hashes; return nil }
 
-// collector answers submissions and keeps the last batch it was given.
 func collector(t *testing.T) (*Client, *[]core.SubmitRequest) {
 	t.Helper()
 	var got []core.SubmitRequest
@@ -69,8 +68,6 @@ func result() core.Result {
 	}
 }
 
-// The spool has to survive the process, and nothing may be sent by the run
-// that produced it: batching only hides a reading session across runs.
 func TestRecordSpoolsToDiskWithoutSending(t *testing.T) {
 	client, got := collector(t)
 	s, err := store.Open(filepath.Join(t.TempDir(), "verdicts.db"))
@@ -152,8 +149,6 @@ func TestFlushWaitsForAgeAndCount(t *testing.T) {
 	}
 }
 
-// Rows are spooled in reading order, which is what a delayed batch is meant to
-// hide; the send order has to differ from it.
 func TestFlushShufflesOrder(t *testing.T) {
 	spool := spoolOf(64, FlushAge+time.Hour)
 	client, got := collector(t)
@@ -201,8 +196,6 @@ func TestOptOutSendsNothing(t *testing.T) {
 	}
 }
 
-// A vote is the one call that carries a full hash, and it must carry the exact
-// one it was given.
 func TestVoteSendsFullHash(t *testing.T) {
 	var got core.VoteRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -223,9 +216,6 @@ func TestVoteSendsFullHash(t *testing.T) {
 	}
 }
 
-// A verdict read from the shared database must not be posted back as if this
-// install had derived it: every reader would otherwise add a confirmation to a
-// verdict nobody re-checked, and the quorum would count readers, not evidence.
 func TestAdoptedVerdictsAreNotSentBack(t *testing.T) {
 	spool := &fakeSpool{}
 	client, _ := collector(t)
@@ -245,8 +235,6 @@ func TestAdoptedVerdictsAreNotSentBack(t *testing.T) {
 	}
 }
 
-// L3 is local reputation: a Drop it pushed up says the domain is untrusted
-// here, not that the words are advertising anywhere else.
 func TestDomainDistrustStaysHome(t *testing.T) {
 	spool := &fakeSpool{}
 	client, _ := collector(t)

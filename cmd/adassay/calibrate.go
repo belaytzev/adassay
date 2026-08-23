@@ -24,9 +24,6 @@ type corpusLabels struct {
 	Pages []pageLabel `yaml:"pages"`
 }
 
-// pageLabel is the hand-written ground truth for one page. Ads holds text
-// prefixes rather than segment ids: ids are positional and would silently point
-// at the wrong paragraph the first time segmentation changes.
 type pageLabel struct {
 	File   string   `yaml:"file"`
 	URL    string   `yaml:"url,omitempty"`
@@ -34,8 +31,6 @@ type pageLabel struct {
 	Ads    []string `yaml:"ads,omitempty"`
 }
 
-// scored is a segment reduced to what the thresholds act on. Features are
-// detected once; hi and lo only ever re-read this.
 type scored struct {
 	page     string
 	id       string
@@ -64,9 +59,6 @@ type evaluation struct {
 	pages    []pageEval
 }
 
-// metrics counts a threshold pair twice over. tp/fp/fn are about Drop, which
-// deletes text; covered and noise are about Drop or Flag together, which is all
-// the grey zone costs a reader — a marker instead of a missing paragraph.
 type metrics struct {
 	hi, lo         float64
 	tp, fp, fn     int
@@ -131,9 +123,6 @@ func calibrate(args []string, stdout io.Writer) error {
 	return report(stdout, ev, cfg.L2)
 }
 
-// evalCorpus extracts and scores every labelled page. Extraction runs once per
-// page and the thresholds are applied afterwards, so a grid of a hundred points
-// costs one pass over the corpus.
 func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 	var ev evaluation
 	data, err := os.ReadFile(filepath.Join(dir, labelsFile))
@@ -175,8 +164,7 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 			}
 			ev.segments = append(ev.segments, s)
 		}
-		// An ad label that matches nothing is label rot, not a miss: it would
-		// quietly shrink the positive class and make every metric look better.
+
 		for i, ok := range matched {
 			if !ok {
 				return ev, fmt.Errorf("calibrate: %s: ad label matches no segment: %q", p.File, p.Ads[i])
@@ -187,10 +175,6 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 	return ev, nil
 }
 
-// unambiguousPrefix is the length above which a label is taken as a prefix. A
-// shorter one has to be the whole segment: "NordVPN Basic" is both a pricing
-// row and the opening of a paragraph about it, and a prefix match would label
-// the paragraph too.
 const unambiguousPrefix = 40
 
 func matchesLabel(flat, label string) bool {
@@ -227,8 +211,6 @@ func score(ev evaluation, hi, lo float64) metrics {
 	return m
 }
 
-// hiddenErrors reports pages whose L1 outcome contradicts the label. L1 does
-// not depend on hi and lo, so it is a pass/fail line rather than a grid.
 func hiddenErrors(ev evaluation) []string {
 	var out []string
 	for _, p := range ev.pages {
@@ -239,9 +221,6 @@ func hiddenErrors(ev evaluation) []string {
 	return out
 }
 
-// grid walks hi and lo in steps of 0.05. Deterministic features produce a
-// handful of distinct scores, so the surface is a staircase: neighbouring
-// points tie often and the table is read for plateaus, not for a maximum.
 func grid(ev evaluation) []metrics {
 	var out []metrics
 	for hi := 0.15; hi <= 0.951; hi += 0.05 {
@@ -254,15 +233,8 @@ func grid(ev evaluation) []metrics {
 
 func round(v float64) float64 { return math.Round(v*100) / 100 }
 
-// MinPrecision is the floor a threshold pair has to clear before recall is
-// worth anything. Dropping a segment deletes it from what the agent reads, and
-// a filter that quietly eats one honest paragraph in ten is worse than no
-// filter: the reader cannot tell which tenth is missing.
 const MinPrecision = 0.95
 
-// safest picks the widest coverage among the pairs that clear MinPrecision.
-// Coverage rather than recall, because Flag keeps the text and only marks it —
-// the cheap answer for a signal too weak to convict on.
 func safest(ms []metrics) metrics {
 	sorted := append([]metrics(nil), ms...)
 	sort.SliceStable(sorted, func(i, j int) bool {

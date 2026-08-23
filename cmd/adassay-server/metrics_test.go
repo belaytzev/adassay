@@ -11,9 +11,6 @@ import (
 	"adassay.com/internal/store"
 )
 
-// scrape returns the metrics endpoint parsed into name -> value, failing the
-// test on anything Prometheus itself would reject: a sample without a HELP and
-// TYPE line above it, or a value that is not a number.
 func scrape(t *testing.T, mux http.Handler) map[string]float64 {
 	t.Helper()
 	w := httptest.NewRecorder()
@@ -62,9 +59,9 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		submitAs(t, mux, client(i), "", "", core.SubmitEntry{Hash: known, Verdict: core.Drop, Source: core.SourceRules})
 	}
-	// One more verdict that nobody confirmed: it must show up as quarantined.
+
 	submitAs(t, mux, client(3), "", "", core.SubmitEntry{Hash: unknown, Verdict: core.Drop, Source: core.SourceRules})
-	// A disagreement the store refuses, and one it accepts: both are divergence.
+
 	submitAs(t, mux, client(4), "", "", core.SubmitEntry{Hash: known, Verdict: core.Keep, Source: core.SourceRules})
 	voteAs(t, mux, client(5), known, core.Keep)
 
@@ -75,8 +72,7 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 		`adassay_requests_total{endpoint="submit"}`: 4,
 		`adassay_requests_total{endpoint="vote"}`:   1,
 		"adassay_submit_divergent_total":            2,
-		// The human vote contradicts known but stands alone, so it is staged
-		// and known keeps being served; unknown is the one row in quarantine.
+
 		"adassay_verdicts_published":   1,
 		"adassay_verdicts_quarantined": 1,
 	}
@@ -85,7 +81,7 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 			t.Errorf("%s = %v, want %v", name, got[name], v)
 		}
 	}
-	// The only bucket asked for holds the quarantined row, so it is a miss.
+
 	if got[`adassay_requests_total{endpoint="bucket"}`] < 1 {
 		t.Errorf("bucket requests = %v, want at least one", got[`adassay_requests_total{endpoint="bucket"}`])
 	}

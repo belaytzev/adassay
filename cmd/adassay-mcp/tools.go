@@ -26,9 +26,6 @@ type textArgs struct {
 	Text string `json:"text" jsonschema:"the text to check: plain text or an HTML fragment"`
 }
 
-// report is what the agent judges on. The verdicts are an opinion, so the
-// evidence behind them travels with the document: a domain caught serving
-// hidden text is worth knowing about even when nothing was dropped.
 type report struct {
 	Markdown    string         `json:"markdown" jsonschema:"the document with ads cut and grey-zone segments wrapped in markers"`
 	Title       string         `json:"title,omitempty"`
@@ -89,9 +86,6 @@ func (s *server) analyze(page []byte, pageURL string) (*mcp.CallToolResult, repo
 		return nil, report{}, err
 	}
 
-	// The structured half of the result is read by the same agent that reads
-	// the markdown, so the title and the hidden samples — page-controlled text,
-	// the samples being the injections themselves — get defused as well.
 	rep := report{Markdown: render.Markdown(res)}
 	res = render.Safe(res)
 	rep.Title = res.Title
@@ -110,9 +104,6 @@ func (s *server) analyze(page []byte, pageURL string) (*mcp.CallToolResult, repo
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: rep.Markdown}}}, rep, nil
 }
 
-// wrap turns the caller's text into a document the extractor understands. Blank
-// lines are the paragraph breaks, and markup is left as it came: escaping it
-// would strip the rel and href attributes the L2 rules read.
 func wrap(text string) []byte {
 	var b strings.Builder
 	b.WriteString("<html><body><article>")

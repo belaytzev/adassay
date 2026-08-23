@@ -13,13 +13,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// EnvDB overrides the default database location; the --db flag overrides both.
 const EnvDB = "ADASSAY_DB"
 
 type Store struct{ db *sql.DB }
 
-// Record is one row of the verdict cache. Reasons travel with the verdict:
-// a cached Drop without its reason is unreviewable.
 type Record struct {
 	Hash    []byte
 	Verdict core.Verdict
@@ -36,8 +33,6 @@ type DomainStats struct {
 	UpdatedAt time.Time
 }
 
-// DefaultPath is the cache directory, since the file is a rebuildable cache of
-// verdicts; config lives elsewhere and is not written here.
 func DefaultPath() (string, error) {
 	if p := os.Getenv(EnvDB); p != "" {
 		return p, nil
@@ -52,7 +47,6 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, "adassay", "verdicts.db"), nil
 }
 
-// Open creates the file and its directory if needed and migrates the schema.
 func Open(path string) (*Store, error) {
 	if path == "" {
 		p, err := DefaultPath()
@@ -79,8 +73,6 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// Lookup returns the cached verdict for a segment hash, or false when the
-// bucket is empty for the current normalization version.
 func (s *Store) Lookup(hash []byte) (Record, bool, error) {
 	row := s.db.QueryRow(
 		`SELECT verdict, reasons, source, votes, seen, updated FROM verdicts WHERE hash = ? AND norm_version = ?`,
@@ -111,8 +103,6 @@ func (s *Store) Lookup(hash []byte) (Record, bool, error) {
 	return rec, true, nil
 }
 
-// Upsert writes a verdict and counts the sighting. Which of two verdicts wins
-// is decided by the pipeline before it gets here — this layer only stores.
 func (s *Store) Upsert(rec Record) error {
 	if !core.ValidSource(rec.Source) {
 		return fmt.Errorf("store: unknown source %q", rec.Source)
@@ -139,11 +129,6 @@ func (s *Store) Upsert(rec Record) error {
 	return nil
 }
 
-// Visit counts one page of a domain and the hidden-text findings it carried;
-// L3 reads the ratio back through Domain. updated_at moves only when the visit
-// brought findings, because it dates the evidence: L3 decays the penalty by its
-// age, and the score is read right after this call — refreshing the timestamp
-// on every clean visit would leave half_life_days without any effect at all.
 func (s *Store) Visit(domain string, findings int) error {
 	_, err := s.db.Exec(
 		`INSERT INTO domains (hash, norm_version, visits, findings, updated_at)
@@ -197,9 +182,6 @@ func decodeReasons(s string) []string {
 	return reasons
 }
 
-// Enqueue spools a verdict for later submission to the shared database. The
-// row lives on disk because a CLI run lasts seconds: holding a batch back "for
-// a few hours" is only possible across processes.
 func (s *Store) Enqueue(e core.SubmitEntry) error {
 	if !core.ValidSource(e.Source) {
 		return fmt.Errorf("store: unknown source %q", e.Source)
@@ -215,8 +197,6 @@ func (s *Store) Enqueue(e core.SubmitEntry) error {
 	return nil
 }
 
-// Pending returns everything waiting to be sent and the age of the oldest row,
-// which is what decides whether a flush is due.
 func (s *Store) Pending() ([]core.SubmitEntry, time.Time, error) {
 	rows, err := s.db.Query(
 		`SELECT hash, verdict, reasons, source, created FROM outbox WHERE norm_version = ? ORDER BY created`,
@@ -249,8 +229,6 @@ func (s *Store) Pending() ([]core.SubmitEntry, time.Time, error) {
 	return entries, oldest, nil
 }
 
-// ClearPending drops the rows a flush managed to deliver; anything left keeps
-// waiting for the next run.
 func (s *Store) ClearPending(hashes []string) error {
 	tx, err := s.db.Begin()
 	if err != nil {

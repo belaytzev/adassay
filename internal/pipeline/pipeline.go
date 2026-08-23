@@ -1,6 +1,3 @@
-// Package pipeline wires the layers into one pass over a page: the local
-// verdict cache answers first, L2 rules score only what it does not know, and
-// the L3 domain score nudges what the rules were unsure about.
 package pipeline
 
 import (
@@ -13,25 +10,18 @@ import (
 	"adassay.com/internal/store"
 )
 
-// ReasonDomain marks a verdict the domain score pushed up, so a Flag raised by
-// distrust is distinguishable from one the rules raised on their own.
 const ReasonDomain = "domain_distrust"
 
-// Cache is the part of the local store the pipeline needs.
 type Cache interface {
 	Lookup(hash []byte) (store.Record, bool, error)
 	Upsert(rec store.Record) error
 	Source(domain string, l3 config.L3) (float64, error)
 }
 
-// Judge is the grey-zone arbiter, kept as an interface so a run without a local
-// model is a nil field rather than a stub server.
 type Judge interface {
 	Decide(topic string, segs []core.Segment) map[string]core.Verdict
 }
 
-// Shared is the read side of the shared verdict database. A nil field is a run
-// that asks nobody anything.
 type Shared interface {
 	Lookup(hash []byte) (core.BucketEntry, bool)
 }
@@ -43,19 +33,11 @@ type Pipeline struct {
 	Judge  Judge
 	Log    *slog.Logger
 
-	// Diverged counts segments where the local rules disagreed with the shared
-	// database. A run full of divergences means the heuristics drifted.
 	Diverged int
 
-	// Adopted holds the ids of segments this run did not decide itself: the
-	// verdict came from the shared database or from a cached verdict above the
-	// rules. Sending those back would let one derivation confirm itself once
-	// per reader, which is exactly what the quorum is meant to prevent.
 	Adopted map[string]bool
 }
 
-// priority resolves two verdicts for the same segment: a human override beats
-// the shared database, which beats a local model, which beats the rules.
 var priority = map[string]int{
 	core.SourceRules:  0,
 	core.SourceOllama: 1,
@@ -65,10 +47,6 @@ var priority = map[string]int{
 
 func Outranks(a, b string) bool { return priority[a] > priority[b] }
 
-// Run decides every segment of an already extracted page and fills in the
-// domain score. What the rules leave in the grey zone goes to the judge, and
-// whatever the judge does not answer stays Flag: a marker is a more honest
-// answer than a guess.
 func (p *Pipeline) Run(res core.Result) (core.Result, error) {
 	score := 1.0
 	if p.Cache != nil && res.Domain != "" {
@@ -99,8 +77,6 @@ func (p *Pipeline) Run(res core.Result) (core.Result, error) {
 	return res, nil
 }
 
-// ask hands the grey zone to the local model. Segments it says nothing about
-// keep their Flag: an unreachable model is a missing opinion, not an error.
 func (p *Pipeline) ask(res core.Result, grey []int) {
 	if p.Judge == nil || len(grey) == 0 {
 		return
@@ -124,29 +100,18 @@ func (p *Pipeline) ask(res core.Result, grey []int) {
 	}
 }
 
-// segment returns the decided segment and whether the verdict came from an
-// authority above the rules, which nothing downstream may revisit.
 func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64) (core.Segment, bool) {
 	hash := store.Hash(seg.Text)
 	cached, hit := p.lookup(hash)
 
-	// A cached verdict from the shared database or a human is the answer, and
-	// the rules never run: re-scoring would risk overriding a human with a
-	// heuristic. Our own past output is not an authority, so a rules row is
-	// re-scored — and the disagreement is worth a line in the log.
 	if hit && !Outranks(core.SourceShared, cached.Source) {
 		seg.Verdict = cached.Verdict
 		seg.Reasons = cached.Reasons
 		return seg, true
 	}
 
-	// The shared database is asked only for what the local cache could not
-	// answer with authority, and its answer is cached so the next run of the
-	// same segment stays offline.
 	if entry, ok := p.lookupShared(hash); ok {
-		// The rules run anyway and their answer is thrown away: how often the
-		// local verdict disagrees with the database is the only measure of
-		// whether the heuristics still track what everyone else derives.
+
 		if local := p.shift(rules.Apply(seg, doc, p.Cfg.L2), sourceScore); local.Verdict != entry.Verdict {
 			p.Diverged++
 			p.log().Warn("verdict diverges from shared database",
@@ -161,10 +126,6 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 		return seg, true
 	}
 
-	// The lookup missed, so a cached model verdict is the best answer left: it
-	// outranks the rules, and holding it back until here is what lets the
-	// shared database correct a judge the local run would otherwise repeat
-	// forever.
 	if hit && Outranks(cached.Source, core.SourceRules) {
 		seg.Verdict = cached.Verdict
 		seg.Reasons = cached.Reasons
@@ -186,14 +147,8 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 	return seg, false
 }
 
-// shift is the L3 modifier: distrust in the domain is an additive push on the
-// segment score, clamped to 0..1. It escalates by at most one step, so a domain
-// with a zero score raises suspicion and never convicts on its own.
 func (p *Pipeline) shift(seg core.Segment, sourceScore float64) core.Segment {
-	// A segment where nothing fired has no borderline verdict to nudge. Without
-	// this the shift alone lifts every plain paragraph over lo on a distrusted
-	// domain, and a document marked whole says exactly as much as one not
-	// marked at all.
+
 	if sourceScore >= 1 || len(seg.Reasons) == 0 {
 		return seg
 	}
@@ -230,8 +185,6 @@ func (p *Pipeline) lookup(hash []byte) (store.Record, bool) {
 	return rec, ok
 }
 
-// remember caches confident findings only: a Keep is the default answer and a
-// Flag is a question left for the judge, neither is worth a row.
 func (p *Pipeline) remember(hash []byte, seg core.Segment) {
 	if seg.Verdict != core.Drop {
 		return

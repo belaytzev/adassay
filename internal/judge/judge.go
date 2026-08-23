@@ -1,6 +1,3 @@
-// Package judge asks a local Ollama model about the segments the deterministic
-// rules could not decide. It never fails a run: an unreachable model or an
-// unparseable answer leaves the grey zone exactly as it was.
 package judge
 
 import (
@@ -16,12 +13,8 @@ import (
 	"adassay.com/internal/core"
 )
 
-// Reason marks a verdict the model decided, so it stays distinguishable from a
-// rules verdict downstream.
 const Reason = "judge"
 
-// maxBody caps the model's answer: a verdict list for one page is kilobytes,
-// and a runaway generation must not be read into memory whole.
 const maxBody = 1 << 20
 
 type Judge struct {
@@ -52,9 +45,6 @@ type answer struct {
 	} `json:"verdicts"`
 }
 
-// Decide returns a verdict per segment id. Ids missing from the result were not
-// decided — by a short answer, a broken one or no answer at all — and the
-// caller keeps whatever it had.
 func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdict {
 	out := make(map[string]core.Verdict, len(segs))
 	size := j.Cfg.BatchSize
@@ -65,14 +55,11 @@ func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdic
 		batch := segs[start:min(start+size, len(segs))]
 		got, err := j.ask(topic, batch)
 		if err != nil {
-			// One failure ends the round: a model that did not answer the
-			// first batch will not answer the eighth, and retrying costs the
-			// full timeout per batch while the reader waits.
+
 			j.log().Warn("judge unavailable, grey zone left as is", "err", err, "segments", len(segs)-start)
 			break
 		}
-		// Matching is by explicit id only. A model that drops, duplicates or
-		// reorders entries must not shift verdicts onto neighbouring segments.
+
 		want := make(map[string]bool, len(batch))
 		for _, s := range batch {
 			want[s.ID] = true
@@ -112,9 +99,6 @@ func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict,
 	return Parse(outer.Response)
 }
 
-// Parse reads the model's own JSON payload. Unknown verdict strings are dropped
-// rather than defaulted: a silent Keep would be indistinguishable from a real
-// one.
 func Parse(payload string) (map[string]core.Verdict, error) {
 	var a answer
 	if err := json.Unmarshal([]byte(payload), &a); err != nil {

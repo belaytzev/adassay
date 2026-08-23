@@ -8,8 +8,6 @@ import (
 	"adassay.com/internal/store"
 )
 
-// greyText fires disclaimer alone, which lands exactly on the grey zone with
-// the default weights — the rules cannot decide and the judge gets it.
 const greyText = "Sponsored post: our favourite grinder of the year."
 
 type fakeJudge struct {
@@ -87,8 +85,6 @@ func TestJudgeSilenceLeavesFlag(t *testing.T) {
 	}
 }
 
-// A Flag that came from a human or the shared database is settled; re-asking a
-// local model about it would let a heuristic overrule an authority.
 func TestJudgeSkipsSettledSegments(t *testing.T) {
 	cache := newCache()
 	cache.put(greyText, store.Record{Verdict: core.Flag, Source: core.SourceHuman})

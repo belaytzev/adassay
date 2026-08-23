@@ -7,9 +7,6 @@ import (
 	"adassay.com/internal/core"
 )
 
-// golden pins the hash space of NormVersion 1. These digests are the addresses
-// the shared database is built on: if a normalization change moves them, every
-// stored verdict stops matching and nothing else in the suite would notice.
 func TestGoldenVectors(t *testing.T) {
 	if core.NormVersion != 1 {
 		t.Fatalf("NormVersion is %d: add vectors for it, do not edit the ones below", core.NormVersion)

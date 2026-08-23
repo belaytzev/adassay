@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The url can come from an agent acting on a page it just read, so a fetch must
-// not become a probe of the network the machine sits on.
 func TestPrivateAndNonHTTPTargetsAreRefused(t *testing.T) {
 	cases := map[string]string{
 		"file scheme":      "file:///etc/passwd",
@@ -25,8 +23,6 @@ func TestPrivateAndNonHTTPTargetsAreRefused(t *testing.T) {
 	}
 }
 
-// A redirect is the other half of the same check: an allowed url may point at
-// a private address only after the first hop.
 func TestRedirectToPrivateAddressIsRefused(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)

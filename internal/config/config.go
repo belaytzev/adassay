@@ -1,7 +1,3 @@
-// Package config holds the tunable part of the filter: L1 significance
-// thresholds, L2 feature weights and patterns, the L3 domain modifier and the
-// judge endpoint. Everything here is expected to be re-tuned often, so it lives
-// in rules.yaml instead of the binary.
 package config
 
 import (
@@ -31,8 +27,6 @@ const (
 	FeatureCTAUrgency   = "cta_urgency"
 )
 
-// Features is the canonical list of L2 features. A weight must exist for every
-// one of them: a missing weight would silently score as zero.
 var Features = []string{
 	FeatureRelSponsored, FeaturePromoCode, FeatureAffiliate, FeatureDisclaimer,
 	FeatureBrandDensity, FeatureCTAUrgency,
@@ -61,8 +55,6 @@ type L2 struct {
 	Patterns  Patterns           `yaml:"patterns"`
 }
 
-// Shortcut bypasses the weighted sum: if every feature fired, the verdict is
-// taken as is.
 type Shortcut struct {
 	Features []string `yaml:"features"`
 	Verdict  string   `yaml:"verdict"`
@@ -86,8 +78,7 @@ type L3 struct {
 	MinVisits      int     `yaml:"min_visits"`
 	HalfLifeDays   float64 `yaml:"half_life_days"`
 	FindingPenalty float64 `yaml:"finding_penalty"`
-	// MaxShift is the additive shift applied to a segment score at full domain
-	// distrust; the result is clamped to 0..1.
+
 	MaxShift float64 `yaml:"max_shift"`
 }
 
@@ -98,9 +89,6 @@ type Judge struct {
 	BatchSize int           `yaml:"batch_size"`
 }
 
-// Load returns the embedded defaults with the file at path decoded on top of
-// them, so an external file only has to carry the keys it changes. An empty
-// path returns the defaults alone.
 func Load(path string) (*Config, error) {
 	cfg := &Config{}
 	if err := decode(defaultRules, cfg); err != nil {
@@ -111,8 +99,7 @@ func Load(path string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: %w", err)
 		}
-		// An empty or fully commented-out file decodes to io.EOF: it overrides
-		// nothing, which is a valid thing to hand a program built on defaults.
+
 		if err := decode(data, cfg); err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("config: %s: %w", path, err)
 		}
@@ -215,9 +202,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// checkPatterns guards the lists the matchers walk. A blank entry is worse than
-// a missing list: "" matches at every offset, so one stray dash in rules.yaml
-// makes its feature fire on every segment of every page, silently.
 func checkPatterns(lists map[string][]string) error {
 	for name, list := range lists {
 		if len(list) == 0 {

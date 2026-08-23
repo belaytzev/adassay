@@ -1,6 +1,3 @@
-// Command adassay-server serves the shared verdict database: clients fetch a
-// bucket by hash prefix and never send a full hash, so the server cannot tell
-// which segment was looked up.
 package main
 
 import (
@@ -51,9 +48,7 @@ func serve(addr, dbPath, trustedProxies string) error {
 		Addr:              addr,
 		Handler:           newMux(st, g, m),
 		ReadHeaderTimeout: 5 * time.Second,
-		// MaxBytesReader caps a body in bytes, not in time: without ReadTimeout
-		// a client dribbling one byte a second holds a goroutine for as long as
-		// it likes, and the rate limiter counts requests, not open connections.
+
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

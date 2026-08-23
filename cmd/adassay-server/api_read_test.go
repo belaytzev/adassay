@@ -22,14 +22,11 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	// One client is enough to publish here: the tests below are about what a
-	// bucket looks like, not about how many strangers had to agree first.
+
 	st.quorum = 1
 	return st
 }
 
-// testMux gives every request a fresh limiter, so tests that are not about
-// rate limiting never trip it.
 func testMux(st *Store) *http.ServeMux {
 	g, err := newGuard("")
 	if err != nil {
@@ -100,7 +97,6 @@ func TestBucketReturnsStoredVerdict(t *testing.T) {
 	}
 }
 
-// A bucket of one is not anonymity: it names the segment that was looked up.
 func TestBucketIsPaddedAndStable(t *testing.T) {
 	st := newTestStore(t)
 	hash := store.HexHash("одна запись")
@@ -124,8 +120,6 @@ func TestBucketIsPaddedAndStable(t *testing.T) {
 		seen[e.Hash] = true
 	}
 
-	// Two lookups of the same bucket must agree; a fresh set of decoys each
-	// time would expose the real rows to anyone diffing the responses.
 	second := decodeBucket(t, get(t, st, bucketPath(prefix, core.NormVersion)))
 	if len(second.Entries) != len(first.Entries) {
 		t.Fatalf("second bucket has %d entries, first had %d", len(second.Entries), len(first.Entries))
@@ -171,8 +165,6 @@ func TestBucketRejectsBadRequests(t *testing.T) {
 	}
 }
 
-// The prefix the client is allowed to send and the prefix the server accepts
-// are the same constant, or every lookup misses.
 func TestPrefixLengthMatchesClient(t *testing.T) {
 	st := newTestStore(t)
 	prefix := store.Prefix(store.Hash("контрактный тест"))
@@ -184,8 +176,6 @@ func TestPrefixLengthMatchesClient(t *testing.T) {
 	}
 }
 
-// The client is checked against the real handler, not against a hand-written
-// fixture: a format the two sides only agree on in tests is not a contract.
 func TestSharedClientAgainstLiveServer(t *testing.T) {
 	const text = "Промокод ACME даёт 20% скидки"
 	st := newTestStore(t)
@@ -214,8 +204,6 @@ func TestSharedClientAgainstLiveServer(t *testing.T) {
 	}
 }
 
-// The probes must not depend on the database: a slow gauge query turning into
-// a failed liveness check would restart the pod over a late scrape.
 func TestHealthzIsStatic(t *testing.T) {
 	st := newTestStore(t)
 	mux := testMux(st)
@@ -230,8 +218,6 @@ func TestHealthzIsStatic(t *testing.T) {
 	}
 }
 
-// A bucket has no natural ceiling: the write endpoint takes any well-formed
-// hash, so the prefix a client asks for is the prefix an attacker can fill.
 func TestBucketIsCapped(t *testing.T) {
 	st := newTestStore(t)
 	const prefix = "beef"

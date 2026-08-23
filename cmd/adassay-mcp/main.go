@@ -1,5 +1,3 @@
-// Command adassay-mcp exposes the filter to an agent over the Model Context
-// Protocol on stdio.
 package main
 
 import (

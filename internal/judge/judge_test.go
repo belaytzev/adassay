@@ -23,8 +23,6 @@ func segs(ids ...string) []core.Segment {
 	return out
 }
 
-// serve replies to /api/generate with the given raw model payloads, one per
-// request in order.
 func serve(t *testing.T, payloads ...string) (*Judge, *[]string) {
 	t.Helper()
 	var prompts []string
@@ -103,8 +101,6 @@ func TestParse(t *testing.T) {
 	}
 }
 
-// The whole point of matching by id: a model that answers out of order and
-// skips one fragment must not slide verdicts onto the neighbours.
 func TestShuffledIncompleteAnswerKeepsIdsStraight(t *testing.T) {
 	j, _ := serve(t, `{"verdicts":[
 		{"id":"s3","verdict":"drop"},
@@ -176,7 +172,7 @@ func TestBatching(t *testing.T) {
 	if len(got) != 3 {
 		t.Errorf("got %v, want a verdict from each batch", got)
 	}
-	// A batch only ever sees its own ids, so an answer cannot leak across.
+
 	if strings.Contains((*prompts)[0], "id: s3") {
 		t.Errorf("first batch carried a later segment:\n%s", (*prompts)[0])
 	}
@@ -207,8 +203,6 @@ func TestLongSegmentIsTruncated(t *testing.T) {
 	}
 }
 
-// The request body must be a plain non-streaming generate call: a streamed
-// answer would arrive as several JSON objects and parse as garbage.
 func TestRequestShape(t *testing.T) {
 	var body []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -232,8 +226,6 @@ func TestRequestShape(t *testing.T) {
 	}
 }
 
-// A model that failed once will not answer the next batch either, and each
-// attempt costs the full timeout while the reader waits for the document.
 func TestFailedBatchStopsTheRound(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

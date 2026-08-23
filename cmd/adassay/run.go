@@ -17,8 +17,6 @@ import (
 	"adassay.com/internal/store"
 )
 
-// errInjection makes hidden-text findings visible to a shell: the document is
-// still printed, but the exit code lets a script or a CI job refuse the source.
 var errInjection = errors.New("hidden text found")
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
@@ -69,9 +67,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	// Without a url there is no domain to count and nothing asked for a
-	// database, so a stdin run keeps to itself: no local database, and no
-	// question asked of the shared one either.
 	var cache pipeline.Cache
 	var outbox *share.Outbox
 	var client *share.Client
@@ -88,8 +83,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 			}
 		}
 		cache = s
-		// Flushed before this run decides anything, so what it records below
-		// cannot leave in the same process.
+
 		outbox = share.NewOutbox(s, client, *noShare)
 		outbox.Flush()
 	}
@@ -126,8 +120,7 @@ func write(w io.Writer, res core.Result, asJSON, verbose bool) error {
 		return render.JSON(w, res)
 	}
 	if verbose {
-		// The sample is the injection itself. It goes out on one line and
-		// through Defuse, or reporting the find hands the agent the payload.
+
 		for _, f := range res.Hidden {
 			if _, err := fmt.Fprintf(w, "# adassay: hidden %s: %s\n", f.Kind, render.Sample(f.Sample)); err != nil {
 				return err

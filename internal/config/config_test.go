@@ -77,7 +77,7 @@ func TestValidate(t *testing.T) {
 			c.L2.Shortcuts = []Shortcut{{Features: []string{"promo_code"}, Verdict: "nuke"}}
 		}, "unknown verdict"},
 		{"empty patterns", func(c *Config) { c.L2.Patterns.Disclaimers = nil }, "disclaimers is empty"},
-		// "" matches at every offset, so the feature would fire on every page.
+
 		{"blank pattern", func(c *Config) {
 			c.L2.Patterns.Disclaimers = append(c.L2.Patterns.Disclaimers, " ")
 		}, "disclaimers["},
@@ -123,8 +123,6 @@ func write(t *testing.T, body string) string {
 	return path
 }
 
-// An override file that overrides nothing is a config with every value
-// commented out, not a broken file: yaml reports it as io.EOF.
 func TestEmptyOverrideFileKeepsDefaults(t *testing.T) {
 	for name, body := range map[string]string{"empty": "", "only comments": "# nothing to change\n"} {
 		t.Run(name, func(t *testing.T) {

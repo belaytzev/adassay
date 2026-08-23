@@ -31,8 +31,6 @@ func TestScoreRangeAndBias(t *testing.T) {
 	}
 }
 
-// Adding a fired feature must never lower the score, or a segment could be
-// cleared by looking more like an ad.
 func TestScoreMonotonic(t *testing.T) {
 	c := l2(t)
 	for mask := 0; mask < 1<<len(config.Features); mask++ {
@@ -78,8 +76,6 @@ func TestClassifyThresholds(t *testing.T) {
 	}
 }
 
-// The shortcut must not depend on the arithmetic: zero every weight and drive
-// the bias to the floor, and rel_sponsored + promo_code still drops.
 func TestShortcutBypassesWeights(t *testing.T) {
 	c := l2(t)
 	c.Bias = -50

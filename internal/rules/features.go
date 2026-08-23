@@ -1,5 +1,3 @@
-// Package rules is L2: deterministic features read off a segment and the
-// scoring that turns them into a verdict.
 package rules
 
 import (
@@ -13,8 +11,6 @@ import (
 	"adassay.com/internal/core"
 )
 
-// Detect returns the features a segment fires, in the canonical order of
-// config.Features.
 func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 	fired := map[string]bool{
 		config.FeatureRelSponsored: relSponsored(seg.Links),
@@ -33,10 +29,6 @@ func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 	return out
 }
 
-// Doc is the document a segment was cut from: how many of its segments mention
-// each name. The fuzzy features are relative — a brand is only suspicious when
-// the rest of the article ignores it. The zero Doc is a document of one
-// segment, which is what checking a bare piece of text is.
 type Doc struct {
 	brand map[string]int
 }
@@ -51,13 +43,8 @@ func NewDoc(segs []core.Segment) Doc {
 	return d
 }
 
-// brandToken is a name as markup leaves it: a capitalised run, internal capitals
-// kept, so NordVPN and TurboLane survive as one token.
 var brandToken = regexp.MustCompile(`\p{Lu}[\p{L}\p{Nd}]{2,}`)
 
-// brands counts name mentions in one text. A capital that opens a sentence is
-// grammar rather than a name, and is not counted — otherwise every "Because"
-// is a brand.
 func brands(text string) map[string]int {
 	out := map[string]int{}
 	for _, m := range brandToken.FindAllStringIndex(text, -1) {
@@ -81,9 +68,6 @@ func sentenceStart(s string, i int) bool {
 	return true
 }
 
-// brandDensity fires when a name is repeated inside one segment and the rest of
-// the document does not mention it: the paragraph is about that product, the
-// article is not.
 func brandDensity(text string, doc Doc) bool {
 	for b, n := range brands(text) {
 		if n >= 2 && doc.brand[b] <= 1 {
@@ -104,14 +88,8 @@ func relSponsored(links []core.Link) bool {
 	return false
 }
 
-// codeToken is what a promo code looks like once it is set apart from prose:
-// an all-caps run of letters and digits. \b is not used — it is ASCII-only and
-// would never fire on a Cyrillic code.
 var codeToken = regexp.MustCompile(`[\p{Lu}\p{Nd}]{4,20}`)
 
-// codeWindow is how far from the promo word the code may sit. Wide enough for
-// "use code" plus a few words, narrow enough that an unrelated acronym further
-// down the paragraph does not count.
 const codeWindow = 60
 
 func promoCode(text string, words []string) bool {
@@ -186,9 +164,6 @@ func matchesAny(text string, patterns []string) bool {
 	return false
 }
 
-// bounded is regexp \b applied to both ends of a match: a word character of
-// the pattern may not continue into a word character of the text. Without it
-// "реклама" fires on "рекламация" and "#ad" fires on "#adassay".
 func bounded(s string, i, n int) bool {
 	first, _ := utf8.DecodeRuneInString(s[i:])
 	last, _ := utf8.DecodeLastRuneInString(s[:i+n])

@@ -6,9 +6,6 @@ import (
 	"sync/atomic"
 )
 
-// metrics is the whole observability surface of the server: a handful of
-// counters plus two gauges read from the database at scrape time.
-// ponytail: hand-written text exposition, client_golang when a histogram or dynamic labels appear
 type metrics struct {
 	bucketReqs atomic.Int64
 	submitReqs atomic.Int64
@@ -17,7 +14,6 @@ type metrics struct {
 	divergent  atomic.Int64
 }
 
-// count wraps a handler in its request counter.
 func (m *metrics) count(c *atomic.Int64, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c.Add(1)
@@ -25,7 +21,6 @@ func (m *metrics) count(c *atomic.Int64, h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// diverged is called from the store, which may run without metrics in tests.
 func (m *metrics) diverged() {
 	if m != nil {
 		m.divergent.Add(1)

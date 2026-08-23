@@ -25,9 +25,6 @@ const acceptancePage = `<html><body><article>
 <p>Kill switches matter more than server counts. A provider with two hundred locations and a leaky reconnect is worse than one with twenty locations that fails closed.</p>
 </article></body></html>`
 
-// TestAcceptanceLayersEndToEnd is the acceptance check of the plan: one page
-// through the real CLI, with L1 findings feeding the domain score that L3 hands
-// back to L2, and the rendered document showing what each verdict means.
 func TestAcceptanceLayersEndToEnd(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -38,7 +35,6 @@ func TestAcceptanceLayersEndToEnd(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "verdicts.db")
 	first := runJSON(t, db, srv.URL)
 
-	// L1: the hidden imperative is reported and the exit code says so.
 	if len(first.Hidden) == 0 {
 		t.Fatal("l1 found no hidden text on a page carrying an injection")
 	}
@@ -46,8 +42,6 @@ func TestAcceptanceLayersEndToEnd(t *testing.T) {
 		t.Errorf("source score = %.3f on first visit, want 1: one page is not evidence", first.SourceScore)
 	}
 
-	// L3: below min_visits the domain is given the benefit of the doubt, above
-	// it the findings start costing trust.
 	var last core.Result
 	for range 6 {
 		last = runJSON(t, db, srv.URL)
@@ -56,8 +50,6 @@ func TestAcceptanceLayersEndToEnd(t *testing.T) {
 		t.Errorf("source score = %.3f after repeated findings, want < 1", last.SourceScore)
 	}
 
-	// The distrust reaches the segments: every score is pushed up, which is the
-	// only path from an L1 finding to an L2 verdict.
 	before := scores(first)
 	raised := 0
 	for id, score := range scores(last) {
@@ -69,7 +61,6 @@ func TestAcceptanceLayersEndToEnd(t *testing.T) {
 		t.Errorf("domain distrust changed no segment score:\nfirst %v\nlast  %v", before, scores(last))
 	}
 
-	// L2: the paid-placement paragraph is convicted, and the marker names why.
 	var dropped, flagged int
 	for _, s := range last.Segments {
 		switch s.Verdict {
@@ -84,8 +75,6 @@ func TestAcceptanceLayersEndToEnd(t *testing.T) {
 	}
 }
 
-// TestAcceptanceFlagKeepsTextDropCutsIt pins the contract the whole tool rests
-// on: Flag is a marker on text the agent still reads, Drop is a deletion.
 func TestAcceptanceFlagKeepsTextDropCutsIt(t *testing.T) {
 	var out bytes.Buffer
 	if err := run(offline(), strings.NewReader(acceptancePage), &out); !errors.Is(err, errInjection) {
@@ -106,9 +95,6 @@ func TestAcceptanceFlagKeepsTextDropCutsIt(t *testing.T) {
 	}
 }
 
-// TestAcceptanceLocalDatabaseStoresNoText is the client half of the promise the
-// server side makes in TestSubmitStoresNoText: the file on disk is searched
-// whole, so a column added later cannot quietly start holding page text.
 func TestAcceptanceLocalDatabaseStoresNoText(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

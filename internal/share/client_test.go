@@ -17,8 +17,6 @@ import (
 
 const segment = "Sponsored: our favourite grinder of the year, on sale this week."
 
-// configHome points os.UserConfigDir at a temporary directory on both linux
-// and darwin, so a test never touches the real installation identifier.
 func configHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -27,8 +25,6 @@ func configHome(t *testing.T) string {
 	return dir
 }
 
-// bucket builds a padded response holding the given entries plus filler that
-// shares the prefix, the way the backend answers.
 func bucket(prefix string, entries ...core.BucketEntry) core.BucketResponse {
 	for i := len(entries); i < core.MinBucket; i++ {
 		filler := prefix + strings.Repeat(hexDigit(i), 64-core.PrefixLen)
@@ -83,8 +79,6 @@ func TestClientIDIsStableAndRandom(t *testing.T) {
 	}
 }
 
-// An id that cannot be stored must not be used: a fresh identity per run would
-// reach the backend's quorum from a single installation.
 func TestClientIDRefusesToBeEphemeral(t *testing.T) {
 	dir := configHome(t)
 	if err := os.Chmod(dir, 0o500); err != nil {
@@ -104,9 +98,6 @@ func TestClientIDRefusesToBeEphemeral(t *testing.T) {
 	}
 }
 
-// The whole point of the read path: the backend may learn the bucket and must
-// not learn the segment. Nothing in the request — path, query, headers, body —
-// may carry the full hash or the client identifier.
 func TestLookupSendsPrefixOnly(t *testing.T) {
 	hash := store.Hash(segment)
 	full := hex.EncodeToString(hash)
@@ -166,8 +157,6 @@ func TestLookupIgnoresForeignEntries(t *testing.T) {
 	}
 }
 
-// A short bucket identifies what was asked for, so the answer is worthless
-// even when it contains a verdict about our hash.
 func TestLookupRejectsUnpaddedBucket(t *testing.T) {
 	hash := store.Hash(segment)
 	prefix := store.Prefix(hash)
@@ -237,9 +226,6 @@ func TestNewWithoutEndpointIsNoClient(t *testing.T) {
 	}
 }
 
-// One lookup per segment means a dead backend is paid for once per paragraph.
-// After a few failures in a row the run stops asking: a page of five hundred
-// segments must not cost five hundred timeouts before it is printed.
 func TestLookupStopsAskingADeadBackend(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -259,9 +245,6 @@ func TestLookupStopsAskingADeadBackend(t *testing.T) {
 	}
 }
 
-// The reasons come off a server the config points at, not necessarily ours,
-// and they end up in the local database and in the agent's JSON. Only rule
-// identifiers survive the trip.
 func TestLookupDropsMalformedReasons(t *testing.T) {
 	hash := store.Hash(segment)
 	entry := core.BucketEntry{

@@ -7,7 +7,6 @@ import (
 	"adassay.com/internal/config"
 )
 
-// filler pads a fragment so readability accepts it as an article.
 const filler = `<p>Обычный абзац статьи, который существует только для того, чтобы у экстрактора набралось достаточно текста для признания страницы читаемой. ` +
 	`Он повторяется несколько раз и не несёт никакого смысла, кроме объёма, необходимого порогу go-readability.</p>`
 

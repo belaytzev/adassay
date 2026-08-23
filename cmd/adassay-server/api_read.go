@@ -18,9 +18,7 @@ func newMux(st *Store, g *guard, m *metrics) *http.ServeMux {
 	mux.HandleFunc("GET /v1/segments/{prefix}", m.count(&m.bucketReqs, func(w http.ResponseWriter, r *http.Request) {
 		handleBucket(w, r, st, m)
 	}))
-	// Counting wraps the limiter, not the other way round: a flood is the one
-	// thing this counter exists to make visible, and rejected requests are the
-	// whole flood.
+
 	mux.HandleFunc("POST /v1/segments", m.count(&m.submitReqs, g.limit(func(w http.ResponseWriter, r *http.Request) {
 		handleSubmit(w, r, st, g)
 	})))
@@ -28,10 +26,7 @@ func newMux(st *Store, g *guard, m *metrics) *http.ServeMux {
 		handleVote(w, r, st)
 	})))
 	mux.HandleFunc("GET /metrics", m.handler(st))
-	// The probes get their own endpoint. Pointing them at /metrics makes every
-	// liveness check pay for the gauge query, and a database slow enough to
-	// miss the probe timeout would then restart the pod instead of just
-	// serving a late scrape.
+
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -49,8 +44,7 @@ func handleBucket(w http.ResponseWriter, r *http.Request, st *Store, m *metrics)
 		writeError(w, http.StatusBadRequest, "norm_version must be an integer")
 		return
 	}
-	// A foreign normalization means foreign hashes: serving them would mix two
-	// hash spaces and quietly rot both.
+
 	if version != core.NormVersion {
 		writeError(w, http.StatusBadRequest, "unsupported norm_version "+strconv.Itoa(version))
 		return
@@ -61,7 +55,7 @@ func handleBucket(w http.ResponseWriter, r *http.Request, st *Store, m *metrics)
 		writeError(w, http.StatusInternalServerError, "bucket unavailable")
 		return
 	}
-	// Counted before padding: decoys would make every lookup look like a hit.
+
 	if len(entries) > 0 {
 		m.bucketHits.Add(1)
 	}
@@ -79,13 +73,6 @@ func validPrefix(p string) bool {
 	return strings.Trim(p, hexDigits) == ""
 }
 
-// pad fills a short bucket with decoys sharing its prefix, so the size of a
-// response says nothing about how many real verdicts the prefix holds. Decoys
-// are derived from the prefix, not random: two lookups of the same bucket must
-// return the same set, otherwise diffing the responses reveals the real rows.
-// A client matches by full hash locally, so a decoy can never be mistaken for
-// a verdict about its segment.
-// ponytail: uniform decoy metadata, vary it if bucket fingerprinting matters
 func pad(prefix string, entries []core.BucketEntry) []core.BucketEntry {
 	if entries == nil {
 		entries = []core.BucketEntry{}

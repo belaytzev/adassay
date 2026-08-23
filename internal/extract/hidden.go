@@ -1,7 +1,3 @@
-// Package extract turns a raw HTML page into filterable text. Hidden is the L1
-// detector: it walks the raw DOM before extraction throws invisible nodes away,
-// because text a source shows to parsers but not to humans is the cheapest
-// deterministic signal on the page.
 package extract
 
 import (
@@ -31,25 +27,12 @@ const (
 
 const sampleLen = 300
 
-// minWords is how many words a long attribute needs before it reads as text
-// rather than as encoded data.
 const minWords = 5
 
-// offScreenPx is how far a coordinate has to be pushed out before it counts as
-// hiding rather than layout.
 const offScreenPx = -500
 
-// zeroWidthRun is where invisible code points stop reading as typography —
-// emoji joiners, word joiners, soft break hints — and start reading as a payload.
-// It counts consecutive code points: Persian spelling puts one ZWNJ between two
-// letters and an emoji family holds together on single ZWJs, so a per-node total
-// would call ordinary text an injection.
 const zeroWidthRun = 8
 
-// Hidden reports nodes the page keeps out of sight. It reads static markup
-// only: inline styles, attributes and node types.
-//
-// ponytail: static CSS only, headless render if misses show up
 func Hidden(r io.Reader, cfg config.L1) ([]core.Finding, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
@@ -60,9 +43,6 @@ func Hidden(r io.Reader, cfg config.L1) ([]core.Finding, error) {
 	return dedupe(out), nil
 }
 
-// dedupe collapses repeated findings: templated markup repeats the same hidden
-// string on every widget of a page, and counting it ten times would inflate the
-// domain score off a single piece of boilerplate.
 func dedupe(in []core.Finding) []core.Finding {
 	seen := make(map[core.Finding]bool, len(in))
 	var out []core.Finding
@@ -130,9 +110,7 @@ func styleKind(st map[string]string) string {
 		isZeroLength(st["font-size"]):
 		return KindCSSHidden
 	}
-	// Collapsed accordions and screen-reader offsets use max-height:0 and
-	// negative margins legitimately, and L1 findings cost the domain trust: a
-	// detector nothing in the corpus exercises only buys false positives.
+
 	for _, prop := range []string{"left", "top", "right", "bottom", "text-indent"} {
 		if v, ok := length(st[prop]); ok && v <= offScreenPx {
 			return KindOffScreen
@@ -144,9 +122,6 @@ func styleKind(st map[string]string) string {
 	return ""
 }
 
-// background reads the colour out of either the longhand or the shorthand: the
-// shorthand is what most pages actually write, and its colour is the one token
-// that parses as one.
 func background(st map[string]string) string {
 	if v := st["background-color"]; v != "" {
 		return normColor(v)
@@ -159,10 +134,6 @@ func background(st map[string]string) string {
 	return ""
 }
 
-// normColor puts equivalent notations of the same colour into one spelling, so
-// that color:#fff on background:#ffffff still compares equal. Only the handful
-// of names a text-hiding trick reaches for is worth mapping; anything else
-// compares as written, which is how this read before.
 func normColor(v string) string {
 	v = strings.TrimSpace(v)
 	switch v {
@@ -192,14 +163,10 @@ func longAttrs(n *html.Node, cfg config.L1) []core.Finding {
 	return out
 }
 
-// prose keeps machine payloads out of the attribute detector: citation
-// metadata, encoded query strings and ids are long but carry no words, while an
-// injection aimed at a reader is written as sentences.
 func prose(s string) bool {
 	return len(strings.Fields(s)) >= minWords
 }
 
-// parseStyle turns an inline style attribute into normalised declarations.
 func parseStyle(s string) map[string]string {
 	if s == "" {
 		return nil
@@ -210,9 +177,7 @@ func parseStyle(s string) map[string]string {
 		if !ok {
 			continue
 		}
-		// The priority flag is dropped before comparison: display:none
-		// !important hides exactly as much as display:none, and leaving the
-		// flag in the value turns every exact match below into a miss.
+
 		if i := strings.IndexByte(val, '!'); i >= 0 {
 			val = val[:i]
 		}
@@ -231,8 +196,6 @@ func isZeroLength(v string) bool {
 	return ok && f == 0
 }
 
-// length parses a CSS length, ignoring its unit: the interesting cases here are
-// zero and large negatives, and both read the same in px, em or rem.
 func length(v string) (float64, bool) {
 	v = strings.TrimSpace(v)
 	end := 0
@@ -263,8 +226,6 @@ func lookup(n *html.Node, name string) (string, bool) {
 	return "", false
 }
 
-// nodeText collapses the visible text of a subtree. <noscript> content is raw
-// markup when scripting is assumed on, so it is re-parsed instead of dumped.
 func nodeText(n *html.Node) string {
 	var b strings.Builder
 	collect(n, &b)
@@ -297,14 +258,6 @@ func collapse(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// looseKinds hide text with a mechanism ordinary pages do not use for prose:
-// display:none, an off-screen offset, colour on colour, a noscript fallback. A
-// long readable string behind one of those is evidence by itself.
-//
-// Everywhere else hiding is routine authoring — CMS comments, prerendered
-// templates, screen-reader strings, meta descriptions — and the corpus showed
-// length alone firing on seven clean pages out of twenty-one. Those kinds count
-// only when the text instructs a reader or addresses an agent.
 var looseKinds = map[string]bool{
 	KindCSSHidden: true,
 	KindOffScreen: true,
@@ -322,7 +275,6 @@ func significant(s, kind string, cfg config.L1) bool {
 	return directed(s, cfg)
 }
 
-// directed reports text written at a reader rather than about the page.
 func directed(s string, cfg config.L1) bool {
 	low := strings.ToLower(s)
 	for _, list := range [][]string{cfg.Imperatives, cfg.AgentNames} {
@@ -335,10 +287,6 @@ func directed(s string, cfg config.L1) bool {
 	return false
 }
 
-// invisible reports text smuggled through code points that render as nothing.
-// Unicode tag characters carry a full ASCII payload and are decoded back; a long
-// run of zero-width characters carries no readable text but is never typography,
-// so it is reported together with the text it was hidden in.
 func invisible(s string) string {
 	var payload strings.Builder
 	zeros, longest := 0, 0

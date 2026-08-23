@@ -39,8 +39,6 @@ func TestSourceScore(t *testing.T) {
 	}
 }
 
-// A single finding must not bury a domain, however small the sample it is
-// allowed to judge.
 func TestSourceScoreSurvivesOneFinding(t *testing.T) {
 	now := time.Now()
 	got := SourceScore(DomainStats{Visits: 5, Findings: 1, UpdatedAt: now}, l3, now)

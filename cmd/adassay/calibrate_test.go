@@ -8,19 +8,12 @@ import (
 
 const corpusDir = "../../testdata/corpus"
 
-// Floors recorded when the corpus was calibrated. They are a ratchet: a change
-// that trades precision for recall has to be argued for by moving these lines,
-// not by letting the numbers drift.
 const (
 	minRecall   = 0.55
 	minCoverage = 1.00
 	maxNoise    = 7
 )
 
-// maxHiddenFalsePositives is the L1 baseline on real pages. Comments, templates,
-// hidden attributes and meta descriptions now have to address a reader before
-// they count, which took the baseline from 16 pages to 2: a Wikipedia short
-// description behind display:none, and a zdnet page hiding prose the same way.
 const maxHiddenFalsePositives = 2
 
 func TestCorpusRegression(t *testing.T) {
@@ -50,8 +43,6 @@ func TestCorpusRegression(t *testing.T) {
 	}
 }
 
-// TestCorpusHidden splits the L1 outcome in two: every planted injection has to
-// be found, and the false positives on real pages may not grow.
 func TestCorpusHidden(t *testing.T) {
 	cfg, err := config.Load("")
 	if err != nil {

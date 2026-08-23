@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// defaultQuorum is how many distinct client UUIDs must agree before a verdict
-// is served. Volume proves nothing: one client repeating itself, or flooding
-// the batch endpoint with thousands of hashes, still publishes nothing.
 const defaultQuorum = 3
 
 const quarantineSchema = `
@@ -22,14 +19,6 @@ CREATE TABLE IF NOT EXISTS confirmations (
 );
 `
 
-// confirm records which verdict this client backs for hash. A client holds one
-// opinion per hash: submitting a different verdict moves its confirmation
-// rather than adding a second one, so repetition never counts as agreement.
-//
-// The move is refused when it comes from a weaker source than the one already
-// on file. A client's outbox flush and its human vote are separate processes:
-// a batch loaded before the vote can arrive after it, and without this guard
-// that stale rules row would quietly retract the reader's correction.
 func confirm(ex execer, hash string, normVersion int, clientID, verdict, source string) error {
 	_, err := ex.Exec(
 		`INSERT INTO confirmations (hash, norm_version, client_id, verdict, source_rank, created)
@@ -46,9 +35,6 @@ func confirm(ex execer, hash string, normVersion int, clientID, verdict, source 
 	return nil
 }
 
-// backers counts the distinct clients behind one verdict for hash. It is both
-// the quarantine gate and the published vote count: anything derived from the
-// number of requests instead would be a number one client can dial up alone.
 func backers(ex queryer, hash string, normVersion int, verdict string) (int, error) {
 	var n int
 	err := ex.QueryRow(

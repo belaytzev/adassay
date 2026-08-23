@@ -13,16 +13,11 @@ import (
 )
 
 const (
-	// A token is one verdict, not one request. Writes are batched: a client
-	// submits its outbox at most a few times a day, so a burst that swallows a
-	// whole batch never blocks an honest install, and the sustained rate still
-	// caps what a flood can claim.
 	writesPerSecond = 1
 	writeBurst      = maxBatch
 	maxTrackedIPs   = 4096
 )
 
-// guard holds everything the write endpoints need to tell clients apart.
 type guard struct {
 	trusted []netip.Prefix
 	lim     *limiter
@@ -47,11 +42,6 @@ func (g *guard) limit(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// clientIP resolves the address a rate limit applies to. Behind a Cloudflare
-// Tunnel every request arrives from the same peer, so CF-Connecting-IP is the
-// only usable identity — and it counts only when the peer that set it is a
-// proxy we run. From anyone else the header is attacker-controlled and a rate
-// limit keyed on it limits nothing.
 func clientIP(r *http.Request, trusted []netip.Prefix) string {
 	host := r.RemoteAddr
 	if h, _, err := net.SplitHostPort(host); err == nil {
@@ -71,10 +61,6 @@ func clientIP(r *http.Request, trusted []netip.Prefix) string {
 	return limitKey(fwd)
 }
 
-// limitKey is the unit a write limit applies to. An IPv4 host is one address,
-// but the smallest IPv6 allocation a home connection gets is a /64 — keying on
-// the /128 would let one subscriber walk 2^64 fresh token buckets, and walking
-// past maxTrackedIPs also clears the buckets of everyone else.
 func limitKey(addr netip.Addr) string {
 	addr = addr.Unmap()
 	if addr.Is6() {
@@ -93,7 +79,6 @@ func isTrusted(addr netip.Addr, trusted []netip.Prefix) bool {
 	return false
 }
 
-// parseTrusted reads a comma-separated list of proxy addresses or CIDRs.
 func parseTrusted(list string) ([]netip.Prefix, error) {
 	var out []netip.Prefix
 	for _, field := range strings.Split(list, ",") {
@@ -115,7 +100,6 @@ func parseTrusted(list string) ([]netip.Prefix, error) {
 	return out, nil
 }
 
-// ponytail: in-process limiter, redis if the server ever runs more than one replica
 type limiter struct {
 	mu    sync.Mutex
 	rate  rate.Limit
@@ -140,10 +124,7 @@ func (l *limiter) allowN(ip string, n int) bool {
 	if !ok {
 		if len(l.seen) >= maxTrackedIPs {
 			l.prune()
-			// Every tracked bucket is still spending: the map is full of live
-			// state and pruning freed nothing. Forgetting all of it hands back
-			// one burst each, which is cheaper than growing without a bound
-			// while a flood of fresh addresses turns every write into a scan.
+
 			if len(l.seen) >= maxTrackedIPs {
 				clear(l.seen)
 			}
@@ -154,8 +135,6 @@ func (l *limiter) allowN(ip string, n int) bool {
 	return lim.AllowN(time.Now(), n)
 }
 
-// prune drops the entries that carry no state: a full bucket is identical to a
-// fresh one, so forgetting it cannot hand anyone extra allowance.
 func (l *limiter) prune() {
 	for ip, lim := range l.seen {
 		if lim.Tokens() >= float64(l.burst) {
