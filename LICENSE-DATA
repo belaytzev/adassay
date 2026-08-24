@@ -1,0 +1,47 @@
+# Licence of the verdict database
+
+The code in this repository is MIT (see [LICENSE](LICENSE)). The verdict
+database is not, and this file says what it is instead.
+
+## What is covered
+
+Every dump of the shared verdict database published by this project, and any
+extract or derivative of one. A dump holds hashes, verdicts, reasons and
+source labels. It holds no page text.
+
+## Licence
+
+**Open Database Licence (ODbL) v1.0** — https://opendatacommons.org/licenses/odbl/1-0/
+
+In short, and the licence text governs where this summary is loose:
+
+- **Share.** Copy, distribute and use the database freely.
+- **Create.** Produce works from it.
+- **Adapt.** Modify, transform and build upon it.
+
+On the condition that you:
+
+- **Attribute.** Say where the database came from.
+- **Share alike.** Publish any adapted database under ODbL as well.
+- **Keep it open.** If you distribute the database in a form that restricts
+  access, also make an unrestricted version available.
+
+## Why the code and the data differ
+
+The code is deliberately permissive: it should spread without friction, and a
+competitor reimplementing the detector costs this project nothing.
+
+The database is the opposite. It accumulates only because people run the tool,
+and it is the one asset that cannot be reproduced by writing better code. Under
+a permissive licence a competitor could stand up a rival service on contributed
+verdicts in a day, contribute nothing back, and the people who filled the
+database would have funded their own replacement. Copyleft keeps improvements
+in the commons.
+
+EasyList made the same split for the same reason.
+
+## What is not covered
+
+**Test fixtures under `testdata/` that are copies of third-party web pages are
+not ours to license.** They remain the property of their publishers and are kept
+only for calibration. See `testdata/corpus/README.md`.
