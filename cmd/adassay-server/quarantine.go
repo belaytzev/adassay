@@ -36,10 +36,13 @@ func confirm(ex execer, hash string, normVersion int, clientID, verdict, source 
 }
 
 func backers(ex queryer, hash string, normVersion int, verdict string) (int, error) {
+	cutoff := time.Now().Add(-installMinAge).Unix()
 	var n int
 	err := ex.QueryRow(
-		`SELECT COUNT(*) FROM confirmations WHERE hash = ? AND norm_version = ? AND verdict = ?`,
-		hash, normVersion, verdict).Scan(&n)
+		`SELECT COALESCE(SUM(MAX(0, MIN(i.upheld, ?) + 1 - ? * i.refuted)), 0)
+		 FROM confirmations c JOIN installs i ON i.client_id = c.client_id
+		 WHERE c.hash = ? AND c.norm_version = ? AND c.verdict = ? AND i.created <= ?`,
+		installMaxWeit, refutedPenalty, hash, normVersion, verdict, cutoff).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("server: quarantine: %w", err)
 	}

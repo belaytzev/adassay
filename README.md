@@ -223,8 +223,16 @@ normalized text. Whoever gets hold of the database learns nothing about what you
 it there is no client at all and nothing leaves the machine. The request is k-anonymous: the
 first 4 hex characters of the hash go out (65536 buckets), the server returns the whole
 bucket, and the full hash is matched locally. The client rejects a response with fewer than
-8 records — a bucket of one isn't anonymity, it points straight at the segment. No install
+8 records, and a short bucket is padded by the server with deterministic decoys. No install
 identifier is sent when reading.
+
+Be clear about what that padding is worth. It hides a thin bucket from anyone reading the
+response in transit or from logs, and it keeps the client from silently accepting a
+one-record answer. It does **not** hide anything from the server: the decoys are its own, so
+it knows exactly how many real records a bucket held and can infer that you asked for one of
+them. k-anonymity here is a real defence against a leaked response and a weak one against the
+operator. Point `ADASSAY_SHARE_URL` at a server you would trust with the knowledge of what
+you read.
 
 **Writing.** Only confident verdicts go out — `Drop` segments and L1 findings — and only as
 a hash, a verdict, a list of reasons and a source. There is no text in the request or in the
@@ -276,13 +284,14 @@ the local cache only.
   carry an install identifier and a full segment hash — otherwise there's nothing to
   deduplicate against and no way to throttle spam. Batching and delay blur the link to a
   session but don't remove it. If that trade doesn't suit you, use `--no-share`.
-- **Quorum runs on the client's word.** `client_id` is a self-assigned UUID from an install
-  file, and the server only checks its shape. Three requests with three different UUIDs are
-  enough to publish a verdict or overwrite someone else's — generating UUIDs costs nothing,
-  so quorum constrains a lone client rather than anyone willing to pretend to be three.
-  Quarantine raises the price of spam without making it prohibitive; the real answer is
-  signed install registration or proof-of-work on submission, and until then the shared
-  database is trust rather than proof.
+- **Quorum counts weight, not heads.** An install registers once at `POST /v1/register` and
+  gets an id and a secret; writes carry both, and the server checks the secret against a
+  stored hash, so a made-up id writes nothing. Registration is still free, which is the
+  point: a fresh install carries **zero** weight for its first day, an established one
+  carries 1, and confirmed contributions raise it to at most 4 while refuted ones sink it
+  back to nothing. Registering in bulk buys patience, not influence, and an install that
+  turns bad loses what it earned. This is deterrence, not proof — a determined attacker can
+  still age installs and behave until it matters.
 - **A single request is k-anonymous, a whole page is not.** A bucket is fetched per segment,
   so a page of two hundred paragraphs leaves as two hundred prefixes in a row from one
   address. An individual prefix says nothing, but a set of them arriving together is close to
@@ -328,9 +337,16 @@ string and use that rank to fend off honest corrections. So a submission doesn't
 results immediately, and one client repeating itself or dumping thousands of hashes
 publishes nothing — and unpublishes nothing of anyone else's.
 
+The write path is authenticated: `POST /v1/register` issues an id and a secret, and both
+`POST /v1/segments` and `POST /v1/vote` require the `X-Adassay-Install` and
+`X-Adassay-Secret` headers. The server stores only a hash of the secret, so a leaked database
+cannot be used to forge writes. The `client_id` in the body must match the signing install.
+
 **Write limits.** 1 verdict per second per address, burst 256 — exactly one full batch; a
 batch spends a token per record rather than per request. Above that, `429` with
-`Retry-After`. Request body up to 1 MiB, batches from 1 to 256 records, a reason up to 48
+`Retry-After`. The table of tracked addresses is capped; when it is full and nothing can be
+pruned, new addresses are refused rather than the table being cleared — under a flood the
+limit tightens instead of switching itself off. Request body up to 1 MiB, batches from 1 to 256 records, a reason up to 48
 characters from `[a-z0-9_-]` (free text in reasons is rejected: it's the only field wide
 enough to smuggle article text into a database that stores no text).
 

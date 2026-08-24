@@ -126,7 +126,7 @@ func (l *limiter) allowN(ip string, n int) bool {
 			l.prune()
 
 			if len(l.seen) >= maxTrackedIPs {
-				clear(l.seen)
+				return false
 			}
 		}
 		lim = rate.NewLimiter(l.rate, l.burst)

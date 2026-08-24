@@ -37,6 +37,8 @@ func submitAs(t *testing.T, mux http.Handler, clientID, remoteAddr, forwarded st
 	if forwarded != "" {
 		r.Header.Set("CF-Connecting-IP", forwarded)
 	}
+	r.Header.Set(headerInstall, clientID)
+	r.Header.Set(headerSecret, testSecretHex)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
 	return w.Code
@@ -48,8 +50,11 @@ func voteAs(t *testing.T, mux http.Handler, clientID, hash string, verdict core.
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
+	r := httptest.NewRequest(http.MethodPost, "/v1/vote", strings.NewReader(string(body)))
+	r.Header.Set(headerInstall, clientID)
+	r.Header.Set(headerSecret, testSecretHex)
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/vote", strings.NewReader(string(body))))
+	mux.ServeHTTP(w, r)
 	return w.Code
 }
 
@@ -342,6 +347,7 @@ func TestUpgradeKeepsOldConfirmationsOutOfReachOfBatches(t *testing.T) {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
+	seedInstall(t, st, client(1))
 
 	if err := confirm(st.db, hash, core.NormVersion, client(1), core.Drop.String(), core.SourceRules); err != nil {
 		t.Fatalf("confirm: %v", err)

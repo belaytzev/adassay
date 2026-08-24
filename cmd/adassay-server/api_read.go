@@ -25,6 +25,9 @@ func newMux(st *Store, g *guard, m *metrics) *http.ServeMux {
 	mux.HandleFunc("POST /v1/vote", m.count(&m.voteReqs, g.limit(func(w http.ResponseWriter, r *http.Request) {
 		handleVote(w, r, st)
 	})))
+	mux.HandleFunc("POST /v1/register", g.limit(func(w http.ResponseWriter, r *http.Request) {
+		handleRegister(w, r, st)
+	}))
 	mux.HandleFunc("GET /metrics", m.handler(st))
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

@@ -15,9 +15,25 @@ import (
 	"adassay.com/internal/store"
 )
 
+const (
+	testInstallID     = "6f1c9f4e-2b8a-4c1d-9f3e-0a7b5c2d8e10"
+	testInstallSecret = "0707070707070707070707070707070707070707070707070707070707070707"
+)
+
+func registered(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path != "/v1/register" {
+		return false
+	}
+	json.NewEncoder(w).Encode(core.RegisterResponse{ClientID: testInstallID, Secret: testInstallSecret})
+	return true
+}
+
 func TestVoteSendsHashOfText(t *testing.T) {
 	var got core.VoteRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if registered(w, r) {
+			return
+		}
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Errorf("decode vote: %v", err)
 		}
@@ -56,6 +72,9 @@ func TestVoteReachesCachedVerdict(t *testing.T) {
 
 	var votes []core.VoteRequest
 	share := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if registered(w, r) {
+			return
+		}
 
 		if r.Method != http.MethodPost {
 			http.Error(w, "{}", http.StatusNotFound)
@@ -95,6 +114,9 @@ func TestVoteOverridesLocally(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "verdicts.db")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if registered(w, r) {
+			return
+		}
 		var req core.VoteRequest
 		json.NewDecoder(r.Body).Decode(&req)
 		json.NewEncoder(w).Encode(core.VoteResponse{Hash: req.Hash, Votes: 1})
@@ -203,6 +225,9 @@ func TestVoteClearsQueuedVerdict(t *testing.T) {
 	s.Close()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if registered(w, r) {
+			return
+		}
 		var req core.VoteRequest
 		json.NewDecoder(r.Body).Decode(&req)
 		json.NewEncoder(w).Encode(core.VoteResponse{Hash: req.Hash, Votes: 1})

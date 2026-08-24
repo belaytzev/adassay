@@ -17,10 +17,15 @@ const (
 
 func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 	var req core.SubmitRequest
-	if !decodeBody(w, r, &req) {
+	in, ok := authenticate(w, r, st, &req)
+	if !ok {
 		return
 	}
 	if !checkEnvelope(w, req.NormVersion, req.ClientID) {
+		return
+	}
+	if req.ClientID != in.clientID {
+		writeError(w, http.StatusUnauthorized, "client_id does not match the signing install")
 		return
 	}
 	if len(req.Entries) == 0 || len(req.Entries) > maxBatch {
@@ -58,10 +63,15 @@ func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 
 func handleVote(w http.ResponseWriter, r *http.Request, st *Store) {
 	var req core.VoteRequest
-	if !decodeBody(w, r, &req) {
+	in, ok := authenticate(w, r, st, &req)
+	if !ok {
 		return
 	}
 	if !checkEnvelope(w, req.NormVersion, req.ClientID) {
+		return
+	}
+	if req.ClientID != in.clientID {
+		writeError(w, http.StatusUnauthorized, "client_id does not match the signing install")
 		return
 	}
 	if !validHash(req.Hash) {

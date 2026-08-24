@@ -1,7 +1,6 @@
 package share
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -112,35 +111,44 @@ func (o *Outbox) Flush() {
 }
 
 func (c *Client) Submit(entries []core.SubmitEntry) error {
-	return c.post("/v1/segments", core.SubmitRequest{
-		ClientID:    c.ID,
+	id, err := c.identity()
+	if err != nil {
+		return fmt.Errorf("share: /v1/segments: %w", err)
+	}
+	return c.post("/v1/segments", id, core.SubmitRequest{
+		ClientID:    id.ClientID,
 		NormVersion: core.NormVersion,
 		Entries:     entries,
 	})
 }
 
 func (c *Client) Vote(hash string, v core.Verdict) error {
-	return c.post("/v1/vote", core.VoteRequest{
-		ClientID:    c.ID,
+	id, err := c.identity()
+	if err != nil {
+		return fmt.Errorf("share: /v1/vote: %w", err)
+	}
+	return c.post("/v1/vote", id, core.VoteRequest{
+		ClientID:    id.ClientID,
 		NormVersion: core.NormVersion,
 		Hash:        hash,
 		Verdict:     v,
 	})
 }
 
-func (c *Client) post(path string, body any) error {
+func (c *Client) post(path string, id Identity, body any) error {
 	if c == nil || c.BaseURL == "" {
 		return fmt.Errorf("share: no endpoint configured, set $%s", EnvEndpoint)
 	}
 
-	if c.ID == "" {
-		return fmt.Errorf("share: %s: no client id, the config directory is not writable", path)
-	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("share: %s: %w", path, err)
 	}
-	resp, err := c.client().Post(c.BaseURL+path, "application/json", bytes.NewReader(b))
+	req, err := id.Request(http.MethodPost, c.BaseURL+path, b)
+	if err != nil {
+		return fmt.Errorf("share: %s: %w", path, err)
+	}
+	resp, err := c.client().Do(req)
 	if err != nil {
 		return fmt.Errorf("share: %s: %w", path, err)
 	}

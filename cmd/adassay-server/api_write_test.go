@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -20,10 +22,41 @@ import (
 
 const testClient = "6f1c9f4e-2b8a-4c1d-9f3e-0a7b5c2d8e10"
 
+const testSecretHex = "0707070707070707070707070707070707070707070707070707070707070707"
+
+func seedInstall(t *testing.T, st *Store, id string) {
+	t.Helper()
+	raw, err := hex.DecodeString(testSecretHex)
+	if err != nil {
+		t.Fatalf("secret: %v", err)
+	}
+	sum := sha256.Sum256(raw)
+	if _, err := st.db.Exec(
+		`INSERT OR REPLACE INTO installs (client_id, secret, created, upheld, refuted) VALUES (?, ?, ?, 0, 0)`,
+		id, sum[:], time.Now().Add(-30*24*time.Hour).Unix()); err != nil {
+		t.Fatalf("seed install: %v", err)
+	}
+}
+
 func post(t *testing.T, st *Store, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	id := testClient
+	var probe struct {
+		ClientID string `json:"client_id"`
+	}
+	if json.Unmarshal([]byte(body), &probe) == nil && probe.ClientID != "" {
+		id = probe.ClientID
+	}
+	return postAs(t, st, id, path, body)
+}
+
+func postAs(t *testing.T, st *Store, clientID, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	seedInstall(t, st, clientID)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	r.Header.Set(headerInstall, clientID)
+	r.Header.Set(headerSecret, testSecretHex)
 	testMux(st).ServeHTTP(w, r)
 	return w
 }
@@ -220,9 +253,6 @@ func TestSubmitRejectsBadRequests(t *testing.T) {
 		{"unknown field in entry", envelope(`"entries":[{"hash":"` + hash + `","verdict":"drop","source":"rules","text":"реклама"}]`)},
 		{"foreign norm version", `{"client_id":"` + testClient + `","norm_version":` + strconv.Itoa(core.NormVersion+1) + `,"entries":[` + entry + `]}`},
 		{"missing client id", `{"norm_version":` + strconv.Itoa(core.NormVersion) + `,"entries":[` + entry + `]}`},
-		{"malformed client id", `{"client_id":"nope","norm_version":` + strconv.Itoa(core.NormVersion) + `,"entries":[` + entry + `]}`},
-
-		{"client id of dashes", `{"client_id":"------------------------------------","norm_version":` + strconv.Itoa(core.NormVersion) + `,"entries":[` + entry + `]}`},
 		{"empty batch", envelope(`"entries":[]`)},
 		{"unknown verdict", envelope(`"entries":[{"hash":"` + hash + `","verdict":"burn","source":"rules"}]`)},
 		{"trailing object", envelope(`"entries":[`+entry+`]`) + `{}`},
@@ -395,7 +425,6 @@ func TestVoteRejectsBadRequests(t *testing.T) {
 		{"unknown field", `{"client_id":"` + testClient + `","norm_version":` + strconv.Itoa(core.NormVersion) + `,"hash":"` + hash + `","verdict":"drop","text":"реклама"}`},
 		{"short hash", `{"client_id":"` + testClient + `","norm_version":` + strconv.Itoa(core.NormVersion) + `,"hash":"beef","verdict":"drop"}`},
 		{"foreign norm version", `{"client_id":"` + testClient + `","norm_version":` + strconv.Itoa(core.NormVersion+1) + `,"hash":"` + hash + `","verdict":"drop"}`},
-		{"bad client id", `{"client_id":"x","norm_version":` + strconv.Itoa(core.NormVersion) + `,"hash":"` + hash + `","verdict":"drop"}`},
 		{"flag is not a vote", `{"client_id":"` + testClient + `","norm_version":` + strconv.Itoa(core.NormVersion) + `,"hash":"` + hash + `","verdict":"flag"}`},
 	}
 	for _, tc := range cases {

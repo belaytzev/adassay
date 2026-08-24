@@ -30,6 +30,7 @@ const (
 type Client struct {
 	BaseURL string
 	ID      string
+	Ident   Identity
 	HTTP    *http.Client
 	Log     *slog.Logger
 

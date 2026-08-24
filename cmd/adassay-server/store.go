@@ -55,7 +55,7 @@ func openStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("server: open %s: %w", path, err)
 	}
-	if _, err := db.Exec(schema + quarantineSchema); err != nil {
+	if _, err := db.Exec(schema + quarantineSchema + installSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("server: schema: %w", err)
 	}

@@ -24,6 +24,10 @@ func newTestStore(t *testing.T) *Store {
 	t.Cleanup(func() { st.Close() })
 
 	st.quorum = 1
+	for i := 0; i <= 32; i++ {
+		seedInstall(t, st, fmt.Sprintf("6f1c9f4e-2b8a-4c1d-9f3e-0a7b5c2d8e%02d", i))
+	}
+	seedInstall(t, st, testClient)
 	return st
 }
 

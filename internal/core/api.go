@@ -58,3 +58,8 @@ type ErrorResponse struct {
 }
 
 const MinBucket = 8
+
+type RegisterResponse struct {
+	ClientID string `json:"client_id"`
+	Secret   string `json:"secret"`
+}
