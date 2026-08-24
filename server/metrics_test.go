@@ -11,10 +11,10 @@ import (
 	"adassay.com/internal/store"
 )
 
-func scrape(t *testing.T, mux http.Handler) map[string]float64 {
+func scrape(t *testing.T, st *Store) map[string]float64 {
 	t.Helper()
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	metricsMux(st, st.mx).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
@@ -67,7 +67,7 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 
 	get(t, st, bucketPath(unknown[:core.PrefixLen], core.NormVersion))
 
-	got := scrape(t, mux)
+	got := scrape(t, st)
 	want := map[string]float64{
 		`adassay_requests_total{endpoint="submit"}`: 4,
 		`adassay_requests_total{endpoint="vote"}`:   1,
@@ -92,7 +92,6 @@ func TestMetricsReportTrafficAndDatabase(t *testing.T) {
 
 func TestMetricsCountBucketHits(t *testing.T) {
 	st := newTestStore(t)
-	mux := testMux(st)
 	hash := store.HexHash("сегмент из базы")
 	if err := st.put(core.BucketEntry{Hash: hash, Verdict: core.Drop, Source: core.SourceRules}, core.NormVersion); err != nil {
 		t.Fatalf("put: %v", err)
@@ -101,11 +100,22 @@ func TestMetricsCountBucketHits(t *testing.T) {
 	get(t, st, bucketPath(hash[:core.PrefixLen], core.NormVersion))
 	get(t, st, bucketPath("0000", core.NormVersion))
 
-	got := scrape(t, mux)
+	got := scrape(t, st)
 	if got["adassay_bucket_hits_total"] != 1 {
 		t.Errorf("bucket hits = %v, want 1", got["adassay_bucket_hits_total"])
 	}
 	if got[`adassay_requests_total{endpoint="bucket"}`] != 2 {
 		t.Errorf("bucket requests = %v, want 2", got[`adassay_requests_total{endpoint="bucket"}`])
+	}
+}
+
+func TestMetricsAreNotOnThePublicListener(t *testing.T) {
+	st := newTestStore(t)
+	w := httptest.NewRecorder()
+	testMux(st).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: /metrics on the public listener leaks database size, "+
+			"quarantine depth and whether an attacker's submissions are landing", w.Code)
 	}
 }

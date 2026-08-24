@@ -41,7 +41,7 @@ func TestRegisterIssuesUsableCredentials(t *testing.T) {
 	if out.ClientID == "" || out.Secret == "" {
 		t.Fatal("register returned empty credentials")
 	}
-	in, err := loadInstall(st.db, out.ClientID)
+	in, err := loadInstall(st.conn(), out.ClientID)
 	if err != nil {
 		t.Fatalf("load install: %v", err)
 	}

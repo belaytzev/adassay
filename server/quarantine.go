@@ -35,11 +35,11 @@ func confirm(ex execer, hash string, normVersion int, clientID, verdict, source 
 	return nil
 }
 
-func backers(ex queryer, hash string, normVersion int, verdict string) (int, error) {
+func backers(ex queryer, clamp, hash string, normVersion int, verdict string) (int, error) {
 	cutoff := time.Now().Add(-installMinAge).Unix()
 	var n int
 	err := ex.QueryRow(
-		`SELECT COALESCE(SUM(MAX(0, MIN(i.upheld, ?) + 1 - ? * i.refuted)), 0)
+		`SELECT COALESCE(SUM(`+clamp+`), 0)
 		 FROM confirmations c JOIN installs i ON i.client_id = c.client_id
 		 WHERE c.hash = ? AND c.norm_version = ? AND c.verdict = ? AND i.created <= ?`,
 		installMaxWeit, refutedPenalty, hash, normVersion, verdict, cutoff).Scan(&n)

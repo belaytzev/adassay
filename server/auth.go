@@ -15,7 +15,7 @@ const (
 )
 
 func handleRegister(w http.ResponseWriter, _ *http.Request, st *Store) {
-	id, secret, err := registerInstall(st.db)
+	id, secret, err := registerInstall(st.conn())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not register")
 		return
@@ -34,7 +34,7 @@ func authenticate(w http.ResponseWriter, r *http.Request, st *Store, v any) (ins
 		writeError(w, http.StatusUnauthorized, "register the install first: POST /v1/register")
 		return install{}, false
 	}
-	in, err := loadInstall(st.db, id)
+	in, err := loadInstall(st.conn(), id)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "register the install first: POST /v1/register")
 		return install{}, false

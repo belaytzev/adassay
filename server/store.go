@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"adassay.com/internal/core"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -35,6 +37,7 @@ const maxBucket = 1024
 
 type Store struct {
 	db *sql.DB
+	d  dialect
 
 	quorum int
 	mx     *metrics
@@ -44,39 +47,52 @@ type Store struct {
 	statsCount [2]int
 }
 
-func openStore(path string) (*Store, error) {
-	if dir := filepath.Dir(path); dir != "" {
+func openStore(dsn string) (*Store, error) {
+	d := sqliteDialect
+	driver, target := "sqlite", dsn+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"
+
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		d, driver, target = postgresDialect, "pgx", dsn
+	} else if dir := filepath.Dir(dsn); dir != "" {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("server: %w", err)
 		}
 	}
 
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate")
+	db, err := sql.Open(driver, target)
 	if err != nil {
-		return nil, fmt.Errorf("server: open %s: %w", path, err)
+		return nil, fmt.Errorf("server: open %s: %w", d.name, err)
 	}
-	if _, err := db.Exec(schema + quarantineSchema + installSchema); err != nil {
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("server: connect %s: %w", d.name, err)
+	}
+	if _, err := db.Exec(d.schema()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("server: schema: %w", err)
 	}
 
+	st := &Store{db: db, d: d, quorum: defaultQuorum}
+
 	var hasRank int
-	if err := db.QueryRow(
-		`SELECT COUNT(*) FROM pragma_table_info('confirmations') WHERE name = 'source_rank'`,
-	).Scan(&hasRank); err != nil {
+	if err := st.conn().QueryRow(d.hasSourceRank()).Scan(&hasRank); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("server: inspect confirmations: %w", err)
 	}
 	if hasRank == 0 {
-		if err := migrateSourceRank(db); err != nil {
+		if err := migrateSourceRank(db, d); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("server: migrate source_rank: %w", err)
 		}
 	}
-	return &Store{db: db, quorum: defaultQuorum}, nil
+	return st, nil
 }
 
-func migrateSourceRank(db *sql.DB) error {
+func (s *Store) conn() binder { return binder{inner: s.db, d: s.d} }
+
+func (s *Store) tx(t *sql.Tx) binder { return binder{inner: t, d: s.d} }
+
+func migrateSourceRank(db *sql.DB, d dialect) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -87,7 +103,7 @@ func migrateSourceRank(db *sql.DB) error {
 		return err
 	}
 
-	if _, err := tx.Exec(`UPDATE confirmations SET source_rank = ?`, sourceRank(core.SourceHuman)); err != nil {
+	if _, err := tx.Exec(d.rebind(`UPDATE confirmations SET source_rank = ?`), sourceRank(core.SourceHuman)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -111,7 +127,7 @@ func (s *Store) stats() (published, quarantined int, err error) {
 
 func (s *Store) countVerdicts() (published, quarantined int, err error) {
 	var total int
-	err = s.db.QueryRow(
+	err = s.conn().QueryRow(
 		`SELECT COUNT(*), COALESCE(SUM(
 			(SELECT COUNT(*) FROM confirmations c
 			 WHERE c.hash = v.hash AND c.norm_version = v.norm_version
@@ -124,7 +140,7 @@ func (s *Store) countVerdicts() (published, quarantined int, err error) {
 }
 
 func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, error) {
-	rows, err := s.db.Query(
+	rows, err := s.conn().Query(
 		`SELECT v.hash, v.verdict, v.reasons, v.source, v.votes FROM verdicts v
 		 WHERE v.norm_version = ? AND v.prefix = ?
 		   AND (SELECT COUNT(*) FROM confirmations c
@@ -235,7 +251,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 	var curVerdict, curSource, curReasons string
 	var curVotes int
 	challenger, refused := false, false
-	switch err := tx.QueryRow(
+	switch err := s.tx(tx).QueryRow(
 		`SELECT verdict, source, reasons, votes FROM verdicts WHERE hash = ? AND norm_version = ?`,
 		e.Hash, normVersion).Scan(&curVerdict, &curSource, &curReasons, &curVotes); {
 	case errors.Is(err, sql.ErrNoRows):
@@ -253,7 +269,8 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 		challenger = true
 	}
 
-	if err := confirm(tx, e.Hash, normVersion, clientID, e.Verdict.String(), e.Source); err != nil {
+	btx := s.tx(tx)
+	if err := confirm(btx, e.Hash, normVersion, clientID, e.Verdict.String(), e.Source); err != nil {
 		return false, 0, err
 	}
 	if refused {
@@ -262,7 +279,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 		}
 		return false, curVotes, nil
 	}
-	n, err := backers(tx, e.Hash, normVersion, e.Verdict.String())
+	n, err := backers(btx, s.d.clampSum, e.Hash, normVersion, e.Verdict.String())
 	if err != nil {
 		return false, 0, err
 	}
@@ -274,7 +291,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 		return true, curVotes, nil
 	}
 	row.Votes = n
-	if err := upsert(tx, row, normVersion); err != nil {
+	if err := upsert(btx, row, normVersion); err != nil {
 		return false, 0, err
 	}
 	if err := tx.Commit(); err != nil {

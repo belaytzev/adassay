@@ -317,10 +317,10 @@ func TestStaleBatchCannotRetractAVote(t *testing.T) {
 	voteAs(t, mux, client(1), hash, core.Keep)
 	submitAs(t, mux, client(1), "", "", core.SubmitEntry{Hash: hash, Verdict: core.Drop, Source: core.SourceRules})
 
-	if n, err := backers(st.db, hash, core.NormVersion, core.Keep.String()); err != nil || n != 1 {
+	if n, err := backers(st.conn(), st.d.clampSum, hash, core.NormVersion, core.Keep.String()); err != nil || n != 1 {
 		t.Fatalf("keep backers = %d (%v), want the vote still standing", n, err)
 	}
-	if n, err := backers(st.db, hash, core.NormVersion, core.Drop.String()); err != nil || n != 1 {
+	if n, err := backers(st.conn(), st.d.clampSum, hash, core.NormVersion, core.Drop.String()); err != nil || n != 1 {
 		t.Fatalf("drop backers = %d (%v), want only the client that did not vote", n, err)
 	}
 }
@@ -352,7 +352,7 @@ func TestUpgradeKeepsOldConfirmationsOutOfReachOfBatches(t *testing.T) {
 	if err := confirm(st.db, hash, core.NormVersion, client(1), core.Drop.String(), core.SourceRules); err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
-	if n, err := backers(st.db, hash, core.NormVersion, core.Keep.String()); err != nil || n != 1 {
+	if n, err := backers(st.conn(), st.d.clampSum, hash, core.NormVersion, core.Keep.String()); err != nil || n != 1 {
 		t.Fatalf("keep backers = %d (%v), want the pre-upgrade confirmation still standing", n, err)
 	}
 }
