@@ -28,8 +28,8 @@ func serve(t *testing.T, payloads ...string) (*Judge, *[]string) {
 	var prompts []string
 	n := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/generate" {
-			t.Errorf("path = %q, want /api/generate", r.URL.Path)
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("path = %q, want /v1/chat/completions", r.URL.Path)
 		}
 		var req request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -38,13 +38,16 @@ func serve(t *testing.T, payloads ...string) (*Judge, *[]string) {
 		if req.Stream {
 			t.Error("stream must be off: the answer is parsed as one object")
 		}
-		if req.Format != "json" {
-			t.Errorf("format = %q, want json", req.Format)
+		if req.ResponseFormat == nil {
+			t.Error("response_format missing: the answer must be schema-constrained")
 		}
-		prompts = append(prompts, req.Prompt)
+		if len(req.Messages) != 1 {
+			t.Fatalf("messages = %d, want 1", len(req.Messages))
+		}
+		prompts = append(prompts, req.Messages[0].Content)
 		payload := payloads[min(n, len(payloads)-1)]
 		n++
-		fmt.Fprint(w, `{"response":`+quote(payload)+`}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":`+quote(payload)+`}}]}`)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -207,7 +210,7 @@ func TestRequestShape(t *testing.T) {
 	var body []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ = io.ReadAll(r.Body)
-		fmt.Fprint(w, `{"response":"{\"verdicts\":[]}"}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"verdicts\":[]}"}}]}`)
 	}))
 	t.Cleanup(srv.Close)
 
