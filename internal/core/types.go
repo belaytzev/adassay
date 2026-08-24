@@ -84,6 +84,27 @@ func ValidSource(s string) bool {
 	return false
 }
 
+const hexDigits = "0123456789abcdef"
+
+func ValidHash(h string) bool {
+	return len(h) == 64 && strings.Trim(h, hexDigits) == ""
+}
+
+func ValidSubmitEntry(e SubmitEntry) bool {
+	if !ValidSource(e.Source) || e.Source == SourceShared || e.Source == SourceHuman {
+		return false
+	}
+	if !ValidHash(e.Hash) {
+		return false
+	}
+	for _, reason := range e.Reasons {
+		if !ValidReason(reason) {
+			return false
+		}
+	}
+	return true
+}
+
 type Segment struct {
 	ID      string   `json:"id"`
 	Text    string   `json:"text"`

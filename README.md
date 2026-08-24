@@ -296,6 +296,10 @@ docker build -t adassay-server .
 kubectl apply -f deploy/k8s/
 ```
 
+The server lives in `server/` as a package with `cmd/adassay-server` as a thin main, so it can
+be embedded or tested directly. It is **AGPL-3.0**, unlike the rest of the repository — see
+[server/README.md](server/README.md).
+
 | Endpoint | Purpose |
 |---|---|
 | `POST /v1/register` | issues an install id and secret |
@@ -350,7 +354,18 @@ and the database; the third is the project's position rather than a matter of vo
 
 ## Licence
 
-Code is [MIT](LICENSE). The verdict database is [ODbL](LICENSE-DATA) — permissive code so it
-spreads, copyleft data so contributed verdicts stay in the commons.
+Three licences, for three different kinds of thing.
 
-Test fixtures copied from third-party sites are neither, and remain their publishers'.
+| What | Licence | Why |
+|---|---|---|
+| Client, CLI, MCP server, shared libraries | [MIT](LICENSE) | should spread without friction; every install feeds the database |
+| `server/` and `cmd/adassay-server/` | [AGPL-3.0](server/LICENSE) | a closed fork of the service would take contributed verdicts and give nothing back |
+| The verdict database dump | [ODbL](LICENSE-DATA) | the one asset that cannot be rewritten; improvements should return to the commons |
+
+Using the CLI, the MCP server or the client library carries no AGPL obligation — those are
+MIT. Running your own instance of the server privately carries none either; publishing
+modifications is required only when you offer the service to others over a network. See
+[server/README.md](server/README.md).
+
+Test fixtures copied from third-party sites are under none of these and remain their
+publishers'.

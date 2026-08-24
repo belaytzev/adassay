@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -41,7 +41,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 
 	var resp core.SubmitResponse
 	for _, e := range req.Entries {
-		if !validEntry(e) {
+		if !core.ValidSubmitEntry(e) {
 			resp.Rejected++
 			continue
 		}
@@ -74,7 +74,7 @@ func handleVote(w http.ResponseWriter, r *http.Request, st *Store) {
 		writeError(w, http.StatusUnauthorized, "client_id does not match the signing install")
 		return
 	}
-	if !validHash(req.Hash) {
+	if !core.ValidHash(req.Hash) {
 		writeError(w, http.StatusBadRequest, "hash must be 64 lowercase hex characters")
 		return
 	}
@@ -123,26 +123,6 @@ func checkEnvelope(w http.ResponseWriter, normVersion int, clientID string) bool
 	return true
 }
 
-func validEntry(e core.SubmitEntry) bool {
-
-	if !core.ValidSource(e.Source) || e.Source == core.SourceShared || e.Source == core.SourceHuman {
-		return false
-	}
-	if !validHash(e.Hash) {
-		return false
-	}
-	for _, reason := range e.Reasons {
-		if !validReason(reason) {
-			return false
-		}
-	}
-	return true
-}
-
-func validHash(h string) bool {
-	return len(h) == 64 && strings.Trim(h, hexDigits) == ""
-}
-
 func validClientID(id string) bool {
 	if len(id) != 36 {
 		return false
@@ -161,5 +141,3 @@ func validClientID(id string) bool {
 	}
 	return true
 }
-
-func validReason(reason string) bool { return core.ValidReason(reason) }

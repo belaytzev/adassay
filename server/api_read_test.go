@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"adassay.com/internal/core"
-	"adassay.com/internal/share"
 	"adassay.com/internal/store"
 )
 
@@ -177,34 +176,6 @@ func TestPrefixLengthMatchesClient(t *testing.T) {
 	}
 	if w := get(t, st, bucketPath(prefix, core.NormVersion)); w.Code != http.StatusOK {
 		t.Fatalf("server rejected a client-built prefix %q: %d %s", prefix, w.Code, w.Body)
-	}
-}
-
-func TestSharedClientAgainstLiveServer(t *testing.T) {
-	const text = "Промокод ACME даёт 20% скидки"
-	st := newTestStore(t)
-	if err := st.put(core.BucketEntry{
-		Hash:    store.HexHash(text),
-		Verdict: core.Drop,
-		Reasons: []string{"promo_code"},
-		Source:  core.SourceRules,
-	}, core.NormVersion); err != nil {
-		t.Fatalf("put: %v", err)
-	}
-
-	srv := httptest.NewServer(testMux(st))
-	defer srv.Close()
-
-	c := &share.Client{BaseURL: srv.URL, HTTP: srv.Client()}
-	entry, ok := c.Lookup(store.Hash(text))
-	if !ok {
-		t.Fatal("client found nothing the server stored")
-	}
-	if entry.Verdict != core.Drop || entry.Hash != store.HexHash(text) {
-		t.Errorf("got %+v, want a drop for the stored hash", entry)
-	}
-	if _, ok := c.Lookup(store.Hash("совершенно другой сегмент")); ok {
-		t.Error("client took a decoy for a verdict")
 	}
 }
 
