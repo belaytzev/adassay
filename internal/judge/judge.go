@@ -27,15 +27,52 @@ func New(cfg config.Judge) *Judge {
 	return &Judge{Cfg: cfg, HTTP: &http.Client{Timeout: cfg.Timeout}}
 }
 
+type message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 type request struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
-	Format string `json:"format"`
+	Model          string    `json:"model"`
+	Messages       []message `json:"messages"`
+	Stream         bool      `json:"stream"`
+	Temperature    float64   `json:"temperature"`
+	ResponseFormat any       `json:"response_format,omitempty"`
 }
 
 type response struct {
-	Response string `json:"response"`
+	Choices []struct {
+		Message message `json:"message"`
+	} `json:"choices"`
+}
+
+func verdictSchema() any {
+	return map[string]any{
+		"type": "json_schema",
+		"json_schema": map[string]any{
+			"name":   "verdicts",
+			"strict": true,
+			"schema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"verdicts": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"id":      map[string]any{"type": "string"},
+								"verdict": map[string]any{"type": "string", "enum": []string{"keep", "flag", "drop"}},
+							},
+							"required":             []string{"id", "verdict"},
+							"additionalProperties": false,
+						},
+					},
+				},
+				"required":             []string{"verdicts"},
+				"additionalProperties": false,
+			},
+		},
+	}
 }
 
 type answer struct {
@@ -75,15 +112,16 @@ func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdic
 
 func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict, error) {
 	body, err := json.Marshal(request{
-		Model:  j.Cfg.Model,
-		Prompt: Build(topic, segs),
-		Stream: false,
-		Format: "json",
+		Model:          j.Cfg.Model,
+		Messages:       []message{{Role: "user", Content: Build(topic, segs)}},
+		Stream:         false,
+		Temperature:    0,
+		ResponseFormat: verdictSchema(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	url := strings.TrimSuffix(j.Cfg.Endpoint, "/") + "/api/generate"
+	url := strings.TrimSuffix(j.Cfg.Endpoint, "/") + "/v1/chat/completions"
 	resp, err := j.client().Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -96,7 +134,10 @@ func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict,
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&outer); err != nil {
 		return nil, fmt.Errorf("judge: decode envelope: %w", err)
 	}
-	return Parse(outer.Response)
+	if len(outer.Choices) == 0 {
+		return nil, fmt.Errorf("judge: %s: no choices in response", url)
+	}
+	return Parse(outer.Choices[0].Message.Content)
 }
 
 func Parse(payload string) (map[string]core.Verdict, error) {
