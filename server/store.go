@@ -128,10 +128,10 @@ func (s *Store) stats() (published, quarantined int, err error) {
 func (s *Store) countVerdicts() (published, quarantined int, err error) {
 	var total int
 	err = s.conn().QueryRow(
-		`SELECT COUNT(*), COALESCE(SUM(
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN
 			(SELECT COUNT(*) FROM confirmations c
 			 WHERE c.hash = v.hash AND c.norm_version = v.norm_version
-			   AND c.verdict = v.verdict) >= ?), 0)
+			   AND c.verdict = v.verdict) >= ? THEN 1 ELSE 0 END), 0)
 		 FROM verdicts v`, s.quorum).Scan(&total, &published)
 	if err != nil {
 		return 0, 0, fmt.Errorf("server: stats: %w", err)

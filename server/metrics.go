@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 )
@@ -31,6 +32,7 @@ func (m *metrics) handler(st *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		published, quarantined, err := st.stats()
 		if err != nil {
+			slog.Error("metrics unavailable", "err", err)
 			writeError(w, http.StatusInternalServerError, "metrics unavailable")
 			return
 		}

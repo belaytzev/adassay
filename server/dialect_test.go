@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestRebindNumbersPlaceholders(t *testing.T) {
 	cases := []struct {
@@ -72,5 +75,23 @@ func TestDSNPasswordIsNotLogged(t *testing.T) {
 	}
 	if p := "/data/adassay-server.db"; redactDSN(p) != p {
 		t.Errorf("a file path must pass through unchanged, got %q", redactDSN(p))
+	}
+}
+
+func TestNoBooleanSumInQueries(t *testing.T) {
+	sources := []string{"store.go", "quarantine.go", "install.go", "api_read.go", "api_write.go"}
+	for _, name := range sources {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		text := string(b)
+		for _, bad := range []string{">= ?), 0)", "> ?), 0)", "= ?), 0)"} {
+			if contains(text, bad) {
+				t.Errorf("%s sums a comparison directly. sqlite yields 0/1 and accepts it, "+
+					"Postgres yields boolean and SUM(boolean) does not exist — "+
+					"wrap it in CASE WHEN … THEN 1 ELSE 0 END", name)
+			}
+		}
 	}
 }
