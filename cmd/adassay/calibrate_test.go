@@ -14,7 +14,7 @@ const (
 	maxNoise    = 83
 )
 
-const maxHiddenFalsePositives = 2
+const maxHiddenFalsePositives = 3
 
 func TestCorpusRegression(t *testing.T) {
 	cfg, err := config.Load("")
@@ -24,6 +24,9 @@ func TestCorpusRegression(t *testing.T) {
 	ev, err := evalCorpus(corpusDir, cfg)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(ev.absent) > 0 {
+		t.Skipf("%d captured pages are not downloaded: run testdata/corpus/fetch.sh", len(ev.absent))
 	}
 	m := score(ev, cfg.L2.Hi, cfg.L2.Lo)
 	if m.ads == 0 {

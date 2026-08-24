@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -61,6 +62,8 @@ type pageEval struct {
 type evaluation struct {
 	segments []scored
 	pages    []pageEval
+	absent   []string
+	stale    []string
 }
 
 type metrics struct {
@@ -155,6 +158,10 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 
 	for _, p := range labels.Pages {
 		page, err := os.ReadFile(filepath.Join(dir, p.File))
+		if errors.Is(err, os.ErrNotExist) && p.URL != "" {
+			ev.absent = append(ev.absent, p.File)
+			continue
+		}
 		if err != nil {
 			return ev, fmt.Errorf("calibrate: %w", err)
 		}
@@ -186,14 +193,22 @@ func evalCorpus(dir string, cfg *config.Config) (evaluation, error) {
 		}
 
 		for i, ok := range matched {
-			if !ok {
+			if ok {
+				continue
+			}
+			if p.URL == "" {
 				return ev, fmt.Errorf("calibrate: %s: ad label matches no segment: %q", p.File, p.Ads[i])
 			}
+			ev.stale = append(ev.stale, fmt.Sprintf("%s: %q", p.File, p.Ads[i]))
 		}
 		for i, ok := range matchedNative {
-			if !ok {
+			if ok {
+				continue
+			}
+			if p.URL == "" {
 				return ev, fmt.Errorf("calibrate: %s: native label matches no segment: %q", p.File, p.Native[i])
 			}
+			ev.stale = append(ev.stale, fmt.Sprintf("%s: %q", p.File, p.Native[i]))
 		}
 		ev.pages = append(ev.pages, pageEval{label: p, hidden: len(res.Hidden) > 0})
 	}
@@ -308,7 +323,17 @@ func report(w io.Writer, ev evaluation, l2 config.L2) error {
 			native++
 		}
 	}
-	fmt.Fprintf(w, "corpus: %d pages, %d segments, %d marked ads, %d marked native\n\n", len(ev.pages), len(ev.segments), ads, native)
+	fmt.Fprintf(w, "corpus: %d pages, %d segments, %d marked ads, %d marked native\n", len(ev.pages), len(ev.segments), ads, native)
+	if len(ev.absent) > 0 {
+		fmt.Fprintf(w, "%d captured pages are not downloaded, run ./fetch.sh in the corpus directory\n", len(ev.absent))
+	}
+	if len(ev.stale) > 0 {
+		fmt.Fprintf(w, "%d labels no longer match their page, which moved on since it was labelled:\n", len(ev.stale))
+		for _, s := range ev.stale {
+			fmt.Fprintln(w, "  "+s)
+		}
+	}
+	fmt.Fprintln(w)
 
 	g := grid(ev)
 	fmt.Fprintln(w, "   hi     lo  drop_prec  drop_rec  caught  native  flag_rate  noise")

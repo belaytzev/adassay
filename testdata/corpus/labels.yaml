@@ -173,7 +173,8 @@ pages:
       - "View at Newegg"
       - "View at Lenovo"
       - "View at Walmart"
-      - "$824.26"
+      - "$849.99"
+      - "$1,799"
       - "$999.97"
       - "View at Framework"
       - "$2,759.99"
@@ -181,7 +182,7 @@ pages:
       - "$3,599"
       - "View at Samsung"
       - "$2,942.35"
-      - "$3,741.99"
+      - "$2,899.99"
       - "View Deal"
   - file: ad_vc_ru.html
     url: https://vc.ru/services

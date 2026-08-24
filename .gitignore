@@ -1,2 +1,7 @@
 .serena/
 docs/
+
+# Captured corpus pages belong to their publishers; fetch.sh downloads them.
+testdata/corpus/ad_*.html
+testdata/corpus/clean_*.html
+testdata/corpus/*.part

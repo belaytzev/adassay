@@ -261,8 +261,14 @@ l2:
 ## Tuning against a corpus
 
 ```sh
+cd testdata/corpus && ./fetch.sh    # once: download the captured pages
 adassay calibrate --corpus testdata/corpus
 ```
+
+The corpus mixes synthetic fixtures, which ship with the repository, and captured pages, which
+do not — those belong to their publishers, so `labels.yaml` records their URLs and `fetch.sh`
+downloads them. Without them calibration still runs on the synthetic set and says what is
+missing.
 
 Labels live in `labels.yaml`: per page, a `file`, a `url`, whether the page has `hidden` text,
 and two lists of paragraph texts — `ads` for declared advertising, `native` for advertising by
