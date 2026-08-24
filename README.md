@@ -24,8 +24,10 @@ Three layers:
   attributes, invisible unicode (`invisible_unicode`, U+E0000 tag characters). Deterministic
   and cheap.
 - **L2** — features over the segment text: `rel="sponsored"`, a promo code next to a promo
-  word, affiliate link, disclaimer (`#ad`, «на правах рекламы»), brand density, CTA mixed
-  with scarcity. A weighted sum gives a score and a verdict; the grey zone moves on.
+  word, affiliate link, disclaimer (`#ad`, «на правах рекламы»), brand density — a name
+  repeated in a segment that already carries one of the other signals, so a technology being
+  explained does not look like a product being sold — CTA mixed with scarcity. A weighted sum
+  gives a score and a verdict; the grey zone moves on.
 - **L3** — domain score: how often hidden nodes turned up there. It shifts segment scores,
   but never decides for them.
 
