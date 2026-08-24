@@ -85,6 +85,18 @@ func openStore(dsn string) (*Store, error) {
 			return nil, fmt.Errorf("server: migrate source_rank: %w", err)
 		}
 	}
+
+	var hasSeeder int
+	if err := st.conn().QueryRow(d.hasColumn("installs", "seeder")).Scan(&hasSeeder); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("server: inspect installs: %w", err)
+	}
+	if hasSeeder == 0 {
+		if _, err := db.Exec(`ALTER TABLE installs ADD COLUMN seeder INTEGER NOT NULL DEFAULT 0`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("server: migrate seeder: %w", err)
+		}
+	}
 	return st, nil
 }
 
@@ -128,7 +140,7 @@ func (s *Store) stats() (published, quarantined int, err error) {
 func (s *Store) countVerdicts() (published, quarantined int, err error) {
 	var total int
 	err = s.conn().QueryRow(
-		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN v.source = 'seed' OR
 			(SELECT COUNT(*) FROM confirmations c
 			 WHERE c.hash = v.hash AND c.norm_version = v.norm_version
 			   AND c.verdict = v.verdict) >= ? THEN 1 ELSE 0 END), 0)
@@ -143,9 +155,10 @@ func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, erro
 	rows, err := s.conn().Query(
 		`SELECT v.hash, v.verdict, v.reasons, v.source, v.votes FROM verdicts v
 		 WHERE v.norm_version = ? AND v.prefix = ?
-		   AND (SELECT COUNT(*) FROM confirmations c
-		        WHERE c.hash = v.hash AND c.norm_version = v.norm_version
-		          AND c.verdict = v.verdict) >= ?
+		   AND (v.source = 'seed'
+		        OR (SELECT COUNT(*) FROM confirmations c
+		            WHERE c.hash = v.hash AND c.norm_version = v.norm_version
+		              AND c.verdict = v.verdict) >= ?)
 		 ORDER BY v.hash
 		 LIMIT ?`,
 		normVersion, prefix, s.quorum, maxBucket)
@@ -233,13 +246,15 @@ func sourceRank(s string) int {
 		return 1
 	case core.SourceOllama:
 		return 2
+	case core.SourceSeed:
+		return 2
 	case core.SourceHuman:
 		return 3
 	}
 	return 0
 }
 
-func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (accepted bool, votes int, err error) {
+func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, seeder bool) (accepted bool, votes int, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, 0, fmt.Errorf("server: submit: %w", err)
@@ -282,6 +297,9 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string) (ac
 	n, err := backers(btx, s.d.clampSum, e.Hash, normVersion, e.Verdict.String())
 	if err != nil {
 		return false, 0, err
+	}
+	if seeder && e.Source == core.SourceSeed && n < s.quorum {
+		n = s.quorum
 	}
 
 	if challenger && n < s.quorum {

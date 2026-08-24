@@ -14,6 +14,9 @@ import (
 const (
 	HeaderInstall = "X-Adassay-Install"
 	HeaderSecret  = "X-Adassay-Secret"
+
+	EnvInstall = "ADASSAY_INSTALL"
+	EnvSecret  = "ADASSAY_SECRET"
 )
 
 type Identity struct {
@@ -30,6 +33,9 @@ func CredentialsPath() (string, error) {
 }
 
 func LoadIdentity() (Identity, bool) {
+	if id, secret := os.Getenv(EnvInstall), os.Getenv(EnvSecret); id != "" && secret != "" {
+		return Identity{ClientID: id, Secret: secret}, true
+	}
 	path, err := CredentialsPath()
 	if err != nil {
 		return Identity{}, false

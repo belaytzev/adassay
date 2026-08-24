@@ -27,6 +27,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		switch args[0] {
 		case "calibrate":
 			return calibrate(args[1:], stdout)
+		case "seed":
+			return seed(args[1:], stdout)
 		case "vote":
 			return vote(args[1:], stdout)
 		}

@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,7 +21,8 @@ CREATE TABLE IF NOT EXISTS installs (
 	secret    BLOB    NOT NULL,
 	created   INTEGER NOT NULL,
 	upheld    INTEGER NOT NULL DEFAULT 0,
-	refuted   INTEGER NOT NULL DEFAULT 0
+	refuted   INTEGER NOT NULL DEFAULT 0,
+	seeder    INTEGER NOT NULL DEFAULT 0
 );
 `
 	installMinAge  = 24 * time.Hour
@@ -35,6 +38,7 @@ type install struct {
 	created  time.Time
 	upheld   int
 	refuted  int
+	seeder   bool
 }
 
 func registerInstall(ex execer) (string, string, error) {
@@ -55,13 +59,15 @@ func registerInstall(ex execer) (string, string, error) {
 func loadInstall(q queryer, clientID string) (install, error) {
 	var in install
 	var created int64
+	var seeder int
 	err := q.QueryRow(
-		`SELECT client_id, secret, created, upheld, refuted FROM installs WHERE client_id = ?`,
-		clientID).Scan(&in.clientID, &in.secret, &created, &in.upheld, &in.refuted)
+		`SELECT client_id, secret, created, upheld, refuted, seeder FROM installs WHERE client_id = ?`,
+		clientID).Scan(&in.clientID, &in.secret, &created, &in.upheld, &in.refuted, &seeder)
 	if err != nil {
 		return install{}, errUnknownInstall
 	}
 	in.created = time.Unix(created, 0)
+	in.seeder = seeder != 0
 	return in, nil
 }
 
@@ -80,4 +86,27 @@ func (in install) weight(now time.Time) int {
 	}
 	w := 1 + min(in.upheld, installMaxWeit) - refutedPenalty*in.refuted
 	return max(w, 0)
+}
+
+func (s *Store) markSeeders(ids []string) error {
+	var wanted []string
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			wanted = append(wanted, id)
+		}
+	}
+
+	if _, err := s.conn().Exec(`UPDATE installs SET seeder = 0 WHERE seeder = 1`); err != nil {
+		return fmt.Errorf("server: clear seeders: %w", err)
+	}
+	for _, id := range wanted {
+		res, err := s.conn().Exec(`UPDATE installs SET seeder = 1 WHERE client_id = ?`, id)
+		if err != nil {
+			return fmt.Errorf("server: mark seeder: %w", err)
+		}
+		if n, err := res.RowsAffected(); err == nil && n == 0 {
+			slog.Warn("server: no such install to mark as seeder", "client_id", id)
+		}
+	}
+	return nil
 }

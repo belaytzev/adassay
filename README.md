@@ -181,6 +181,10 @@ they are an open question, and sending one would give away the page while adding
 Sending happens in batches off disk — not sooner than six hours, not fewer than twenty
 records — so the stream is not a broadcast of your reading session.
 
+**Credentials.** An install keeps its id and secret in the user config directory. Headless
+hosts can supply them through `ADASSAY_INSTALL` and `ADASSAY_SECRET` instead, which takes
+precedence over the file and avoids registering a new install on every container start.
+
 **Turning it off.** `--no-share` or `ADASSAY_NO_SHARE=1` stops sending; reading still works.
 Leaving `ADASSAY_SHARE_URL` unset disables both. A run from stdin without `--db` opens no
 database at all.
@@ -310,7 +314,7 @@ be embedded or tested directly. It is **AGPL-3.0**, unlike the rest of the repos
 | `GET /healthz` | liveness |
 
 Settings: `--addr` (default `:8080`), `--db` / `ADASSAY_SERVER_DB`, `--trusted-proxies` /
-`ADASSAY_TRUSTED_PROXIES`.
+`ADASSAY_TRUSTED_PROXIES`, `ADASSAY_SEEDERS`.
 
 **Writes are authenticated.** An install registers once and presents its id and secret on
 every write. Only a hash of the secret is stored, so a leaked database cannot forge writes.
@@ -327,6 +331,33 @@ instead of switching itself off.
 
 Publish it through a tunnel rather than a port forward, and list the tunnel's addresses in
 `ADASSAY_TRUSTED_PROXIES` — only then is the forwarded client IP header believed.
+
+## Seeding the database
+
+A fresh database serves nothing: quorum needs several independent installs to agree, and
+until they do, every client falls back to computing verdicts locally. `adassay seed` fills it
+from the operator's own hosts.
+
+```sh
+adassay seed --feeds deploy/seed/feeds.txt --since 24h --limit 60 --pause 10s
+```
+
+It walks the feeds, keeps articles published inside the window, shuffles them, and visits them
+with a pause in between. Verdicts go out as `source=seed` and are published immediately,
+without waiting for quorum — which is why the right to send them is granted per install:
+
+1. register the host: `curl -X POST https://api.adassay.com/v1/register`
+2. hand the id and secret to the host as `ADASSAY_INSTALL` and `ADASSAY_SECRET`
+3. list the id in `ADASSAY_SEEDERS` on the server, comma-separated
+
+The list is reconciled at every server start: an id removed from it loses the right, and
+restoring the database from a dump does not hand it back. Everything else about a seeder
+install is ordinary — a human vote still overrides its verdict once the vote reaches quorum.
+
+`deploy/seed/seed.sh` is a cron wrapper for a host outside the cluster; the Helm chart in the
+homelab repository runs the same binary as a CronJob. Spread the hosts across locations:
+publishers rate-limit by address, and a single IP walking thirty publishers every six hours
+is the pattern they block.
 
 ## Contributing
 

@@ -19,6 +19,7 @@ const (
 	SourceOllama = "ollama"
 	SourceShared = "shared"
 	SourceHuman  = "human"
+	SourceSeed   = "seed"
 )
 
 var verdictNames = map[Verdict]string{
@@ -78,7 +79,7 @@ func ValidReason(r string) bool {
 
 func ValidSource(s string) bool {
 	switch s {
-	case SourceRules, SourceOllama, SourceShared, SourceHuman:
+	case SourceRules, SourceOllama, SourceShared, SourceHuman, SourceSeed:
 		return true
 	}
 	return false

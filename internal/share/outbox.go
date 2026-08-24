@@ -36,6 +36,8 @@ type Outbox struct {
 	Client *Client
 	Log    *slog.Logger
 	Now    func() time.Time
+
+	Source string
 }
 
 func NewOutbox(spool Spool, c *Client, optOut bool) *Outbox {
@@ -66,7 +68,7 @@ func (o *Outbox) Record(res core.Result, adopted map[string]bool) {
 			Hash:    store.HexHash(seg.Text),
 			Verdict: core.Drop,
 			Reasons: seg.Reasons,
-			Source:  source(seg),
+			Source:  o.sourceOf(seg),
 		})
 	}
 	for _, f := range res.Hidden {
@@ -76,7 +78,7 @@ func (o *Outbox) Record(res core.Result, adopted map[string]bool) {
 			Verdict: core.Drop,
 
 			Reasons: []string{"hidden_" + f.Kind},
-			Source:  core.SourceRules,
+			Source:  o.sourceOf(core.Segment{}),
 		})
 	}
 }
@@ -93,13 +95,38 @@ func (o *Outbox) Flush() {
 	if len(entries) < FlushMin || o.now().Sub(oldest) < FlushAge {
 		return
 	}
+	o.send(entries)
+}
+
+func (o *Outbox) FlushNow() {
+	if o == nil {
+		return
+	}
+	for last := 0; ; {
+		entries, _, err := o.Spool.Pending()
+		if err != nil {
+			o.log().Warn("outbox: read failed", "err", err)
+			return
+		}
+		if len(entries) == 0 || !o.send(entries) {
+			return
+		}
+		if last > 0 && len(entries) >= last {
+			o.log().Warn("outbox: spool is not draining", "pending", len(entries))
+			return
+		}
+		last = len(entries)
+	}
+}
+
+func (o *Outbox) send(entries []core.SubmitEntry) bool {
 	rand.Shuffle(len(entries), func(i, j int) { entries[i], entries[j] = entries[j], entries[i] })
 	if len(entries) > maxBatch {
 		entries = entries[:maxBatch]
 	}
 	if err := o.Client.Submit(entries); err != nil {
 		o.log().Warn("outbox: submit failed", "entries", len(entries), "err", err)
-		return
+		return false
 	}
 	hashes := make([]string, len(entries))
 	for i, e := range entries {
@@ -107,7 +134,9 @@ func (o *Outbox) Flush() {
 	}
 	if err := o.Spool.ClearPending(hashes); err != nil {
 		o.log().Warn("outbox: clear failed", "err", err)
+		return false
 	}
+	return true
 }
 
 func (c *Client) Submit(entries []core.SubmitEntry) error {
@@ -165,7 +194,10 @@ func (o *Outbox) enqueue(e core.SubmitEntry) {
 	}
 }
 
-func source(seg core.Segment) string {
+func (o *Outbox) sourceOf(seg core.Segment) string {
+	if o.Source != "" {
+		return o.Source
+	}
 	if slices.Contains(seg.Reasons, judge.Reason) {
 		return core.SourceOllama
 	}

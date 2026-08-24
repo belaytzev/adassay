@@ -55,6 +55,14 @@ func (d dialect) schema() string {
 	return s
 }
 
+func (d dialect) hasColumn(table, column string) string {
+	if d.name == "postgres" {
+		return `SELECT COUNT(*) FROM information_schema.columns
+		        WHERE table_name = '` + table + `' AND column_name = '` + column + `'`
+	}
+	return `SELECT COUNT(*) FROM pragma_table_info('` + table + `') WHERE name = '` + column + `'`
+}
+
 func (d dialect) hasSourceRank() string {
 	if d.name == "postgres" {
 		return `SELECT COUNT(*) FROM information_schema.columns

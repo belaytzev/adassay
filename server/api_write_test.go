@@ -29,7 +29,8 @@ func seedInstall(t *testing.T, st *Store, id string) {
 	}
 	sum := sha256.Sum256(raw)
 	if _, err := st.db.Exec(
-		`INSERT OR REPLACE INTO installs (client_id, secret, created, upheld, refuted) VALUES (?, ?, ?, 0, 0)`,
+		`INSERT INTO installs (client_id, secret, created, upheld, refuted) VALUES (?, ?, ?, 0, 0)
+		 ON CONFLICT (client_id) DO NOTHING`,
 		id, sum[:], time.Now().Add(-30*24*time.Hour).Unix()); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}

@@ -27,7 +27,13 @@ func (f *fakeSpool) Pending() ([]core.SubmitEntry, time.Time, error) {
 	return slices.Clone(f.entries), f.oldest, nil
 }
 
-func (f *fakeSpool) ClearPending(hashes []string) error { f.cleared = hashes; return nil }
+func (f *fakeSpool) ClearPending(hashes []string) error {
+	f.cleared = hashes
+	f.entries = slices.DeleteFunc(f.entries, func(e core.SubmitEntry) bool {
+		return slices.Contains(hashes, e.Hash)
+	})
+	return nil
+}
 
 func collector(t *testing.T) (*Client, *[]core.SubmitRequest) {
 	t.Helper()
@@ -151,6 +157,7 @@ func TestFlushWaitsForAgeAndCount(t *testing.T) {
 
 func TestFlushShufflesOrder(t *testing.T) {
 	spool := spoolOf(64, FlushAge+time.Hour)
+	queued := slices.Clone(spool.entries)
 	client, got := collector(t)
 	(&Outbox{Spool: spool, Client: client}).Flush()
 
@@ -158,12 +165,12 @@ func TestFlushShufflesOrder(t *testing.T) {
 		t.Fatalf("want one batch, got %d", len(*got))
 	}
 	sent := (*got)[0].Entries
-	if len(sent) != len(spool.entries) {
-		t.Fatalf("want %d entries, got %d", len(spool.entries), len(sent))
+	if len(sent) != len(queued) {
+		t.Fatalf("want %d entries, got %d", len(queued), len(sent))
 	}
 	same := true
 	for i, e := range sent {
-		if e.Hash != spool.entries[i].Hash {
+		if e.Hash != queued[i].Hash {
 			same = false
 			break
 		}
@@ -258,5 +265,47 @@ func TestDomainDistrustStaysHome(t *testing.T) {
 	}
 	if !sawOwn {
 		t.Error("the run's own verdict was dropped along with the shifted one")
+	}
+}
+
+func TestFlushNowIgnoresThresholdsAndDrainsEverything(t *testing.T) {
+	spool := spoolOf(maxBatch+7, time.Minute)
+	client, got := collector(t)
+	(&Outbox{Spool: spool, Client: client}).FlushNow()
+
+	var sent int
+	for _, req := range *got {
+		sent += len(req.Entries)
+	}
+	if sent != maxBatch+7 {
+		t.Fatalf("sent %d entries, want %d", sent, maxBatch+7)
+	}
+	if len(spool.entries) != 0 {
+		t.Errorf("spool still holds %d entries", len(spool.entries))
+	}
+}
+
+func TestSeedSourceOverridesTheDetector(t *testing.T) {
+	spool := &fakeSpool{}
+	client, _ := collector(t)
+	(&Outbox{Spool: spool, Client: client, Source: core.SourceSeed}).Record(result(), nil)
+
+	if len(spool.entries) == 0 {
+		t.Fatal("nothing recorded")
+	}
+	for _, e := range spool.entries {
+		if e.Source != core.SourceSeed {
+			t.Errorf("hash %s carries source %q, want %q", e.Hash[:8], e.Source, core.SourceSeed)
+		}
+	}
+}
+
+func TestIdentityComesFromTheEnvironment(t *testing.T) {
+	t.Setenv(EnvInstall, "install-abc")
+	t.Setenv(EnvSecret, "secret-xyz")
+
+	id, ok := LoadIdentity()
+	if !ok || id.ClientID != "install-abc" || id.Secret != "secret-xyz" {
+		t.Fatalf("LoadIdentity() = %+v, %v", id, ok)
 	}
 }

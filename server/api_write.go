@@ -41,11 +41,15 @@ func handleSubmit(w http.ResponseWriter, r *http.Request, st *Store, g *guard) {
 
 	var resp core.SubmitResponse
 	for _, e := range req.Entries {
+		if e.Source == core.SourceSeed && !in.seeder {
+			resp.Rejected++
+			continue
+		}
 		if !core.ValidSubmitEntry(e) {
 			resp.Rejected++
 			continue
 		}
-		accepted, _, err := st.submit(e, req.NormVersion, req.ClientID)
+		accepted, _, err := st.submit(e, req.NormVersion, req.ClientID, in.seeder)
 		switch {
 		case err != nil:
 			slog.Error("submit failed", "prefix", e.Hash[:core.PrefixLen], "err", err)
@@ -87,7 +91,7 @@ func handleVote(w http.ResponseWriter, r *http.Request, st *Store) {
 		Hash:    req.Hash,
 		Verdict: req.Verdict,
 		Source:  core.SourceHuman,
-	}, req.NormVersion, req.ClientID)
+	}, req.NormVersion, req.ClientID, false)
 	if err != nil {
 		slog.Error("vote failed", "prefix", req.Hash[:core.PrefixLen], "err", err)
 		writeError(w, http.StatusInternalServerError, "vote not stored")

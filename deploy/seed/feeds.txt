@@ -1,0 +1,45 @@
+# Feeds walked by `adassay seed`. One URL per line, # starts a comment.
+#
+# The list leans towards publishers that live on affiliate revenue: those pages
+# are where the detector has something to find. The last group is the control —
+# sites with little or no commercial insert, so the database gets negative
+# examples too and Keep stays the common verdict.
+
+# Affiliate-heavy consumer tech
+https://www.techradar.com/feeds/articletype/news
+https://www.techradar.com/feeds/articletype/review
+https://www.tomsguide.com/feeds/all
+https://www.tomshardware.com/feeds/all
+https://www.digitaltrends.com/feed/
+https://www.zdnet.com/news/rss.xml
+https://www.cnet.com/rss/news/
+https://www.pcworld.com/feed
+https://www.laptopmag.com/feeds/all
+https://www.androidauthority.com/feed/
+https://9to5mac.com/feed/
+https://9to5google.com/feed/
+https://www.androidpolice.com/feed/
+https://www.xda-developers.com/feed/
+https://www.makeuseof.com/feed/
+https://www.howtogeek.com/feed/
+https://lifehacker.com/feed/rss
+https://www.slashgear.com/feed/
+https://bgr.com/feed/
+https://www.reviewgeek.com/feed/
+
+# General tech press, mixed commercial pressure
+https://www.theverge.com/rss/index.xml
+https://www.engadget.com/rss.xml
+https://gizmodo.com/feed
+https://mashable.com/feeds/rss/all
+https://venturebeat.com/feed/
+https://techcrunch.com/feed/
+https://www.wired.com/feed/rss
+
+# Control group: little to no affiliate revenue
+https://arstechnica.com/feed/
+https://lwn.net/headlines/rss
+https://news.ycombinator.com/rss
+https://blog.golang.org/feed.atom
+https://www.phoronix.com/rss.php
+https://rachelbythebay.com/w/atom.xml

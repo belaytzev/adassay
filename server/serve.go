@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,7 @@ const (
 	EnvDB      = "ADASSAY_SERVER_DB"
 	EnvTrusted = "ADASSAY_TRUSTED_PROXIES"
 	EnvMetrics = "ADASSAY_METRICS_ADDR"
+	EnvSeeders = "ADASSAY_SEEDERS"
 )
 
 func metricsMux(st *Store, m *metrics) *http.ServeMux {
@@ -38,6 +40,10 @@ func Serve(addr, metricsAddr, dbPath, trustedProxies string) error {
 		return err
 	}
 	defer st.Close()
+
+	if err := st.markSeeders(strings.Split(os.Getenv(EnvSeeders), ",")); err != nil {
+		return err
+	}
 
 	g, err := newGuard(trustedProxies)
 	if err != nil {
