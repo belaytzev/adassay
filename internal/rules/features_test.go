@@ -128,21 +128,41 @@ func TestDisclaimer(t *testing.T) {
 
 func TestBrandDensity(t *testing.T) {
 	cases := []struct {
-		name string
-		text string
-		doc  []string
-		want bool
+		name  string
+		text  string
+		links []core.Link
+		doc   []string
+		want  bool
 	}{
-		{"repeated name the article ignores", "Produced in partnership with ShieldPath, and ShieldPath paid for the placement.", nil, true},
-		{"mentioned once", "Teams have been moving to TurboLane CI, which bills by the minute.", nil, false},
-		{"repeated but the article is about it", "The ShieldPath client leaks on reconnect, and ShieldPath knows it.",
-			[]string{"ShieldPath publishes an audit every year.", "Compare that to how ShieldPath handles DNS."}, false},
-		{"sentence-initial word is not a brand", "Because it caches. Because it caches, the build is fast.", nil, false},
-		{"plain prose", "The compiler rewrites the loop into a single pass.", nil, false},
+		{name: "repeated name the article ignores", want: true,
+			text: "Produced in partnership with ShieldPath, and ShieldPath paid for the placement."},
+		{name: "repeated name next to a sponsored link", want: true,
+			text:  "The ShieldPath plan covers five devices, and ShieldPath throws in a router licence.",
+			links: []core.Link{{Href: "https://shieldpath.example/plans", Rel: "sponsored"}}},
+		{name: "repeated name next to a promo code", want: true,
+			text: "Readers get three months of ShieldPath with promo code SHIELD20, and ShieldPath renews at list price."},
+		{name: "repeated name pushed with scarcity", want: true,
+			text: "Claim your ShieldPath trial today only, because ShieldPath raises the price on Monday."},
+		{name: "mentioned once", want: false,
+			text: "Teams have been moving to TurboLane CI, which bills by the minute."},
+		{name: "repeated but the article is about it", want: false,
+			text: "The ShieldPath client leaks on reconnect, and ShieldPath knows it.",
+			doc:  []string{"ShieldPath publishes an audit every year.", "Compare that to how ShieldPath handles DNS."}},
+		{name: "technical term repeated in explanatory prose", want: false,
+			text: "The Kubernetes control plane reconciles desired state, and every Kubernetes node runs a kubelet."},
+		{name: "technical term repeated in a diagram", want: false,
+			text: "Kubernetes Cluster │ Control Plane │ API Server │ Scheduler │ etcd │ Worker Node │ Kubernetes Pods"},
+		{name: "technical term next to an ordinary link", want: false,
+			text:  "Minikube starts a single-node cluster, and Minikube ships the dashboard addon.",
+			links: []core.Link{{Href: "https://minikube.sigs.k8s.io/docs/start/"}}},
+		{name: "sentence-initial word is not a brand", want: false,
+			text: "Because it caches. Because it caches, the build is fast."},
+		{name: "plain prose", want: false,
+			text: "The compiler rewrites the loop into a single pass."},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			segs := []core.Segment{{ID: "s1", Text: c.text}}
+			segs := []core.Segment{{ID: "s1", Text: c.text, Links: c.links}}
 			for i, extra := range c.doc {
 				segs = append(segs, core.Segment{ID: fmt.Sprintf("s%d", i+2), Text: extra})
 			}

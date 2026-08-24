@@ -217,6 +217,12 @@ pages:
   - file: clean_habr_tech.html
     url: https://habr.com/ru/articles/799337/
     ads: []
+  - file: clean_k8s_codingshuttle.html
+    url: https://www.codingshuttle.com/handbooks/kubernetes-handbook
+    ads: []
+  - file: clean_k8s_devto.html
+    url: https://dev.to/yash_sonawane25/kubernetes-explained-why-every-cloud-devops-engineer-should-learn-it-3kgg
+    ads: []
   - file: clean_jvns.html
     url: https://jvns.ca/blog/2024/11/18/how-to-import-a-javascript-library/
     ads: []

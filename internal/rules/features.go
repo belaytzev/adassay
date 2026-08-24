@@ -17,9 +17,9 @@ func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 		config.FeaturePromoCode:    promoCode(seg.Text, p.PromoWords),
 		config.FeatureAffiliate:    affiliate(seg.Links, p),
 		config.FeatureDisclaimer:   matchesAny(seg.Text, p.Disclaimers),
-		config.FeatureBrandDensity: brandDensity(seg.Text, doc),
 		config.FeatureCTAUrgency:   matchesAny(seg.Text, p.CTAWords) && matchesAny(seg.Text, p.UrgencyWords),
 	}
+	fired[config.FeatureBrandDensity] = corroborated(fired) && brandDensity(seg.Text, doc)
 	var out []string
 	for _, f := range config.Features {
 		if fired[f] {
@@ -66,6 +66,15 @@ func sentenceStart(s string, i int) bool {
 		return r == '.' || r == '!' || r == '?' || r == ':'
 	}
 	return true
+}
+
+func corroborated(fired map[string]bool) bool {
+	for _, ok := range fired {
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func brandDensity(text string, doc Doc) bool {
