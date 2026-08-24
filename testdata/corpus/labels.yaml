@@ -30,10 +30,49 @@ pages:
     ads: []
   - file: ad_cnet_laptop.html
     url: https://www.cnet.com/tech/computing/best-laptop/
-    ads: []
+    ads:
+      - "$1,500 at Best Buy"
+      - "$2,000 at Best Buy"
+      - "$1,350 at Dell"
+      - "$699 at Apple $699 at Amazon"
+      - "$900 at Lenovo"
+      - "$700 at Amazon"
+      - "$1,499 at Walmart"
+      - "$3,130 at Dell"
+      - "$1,100 at Best Buy"
+      - "$1,700 at Best Buy"
+      - "$4,000 at Asus"
+      - "$725 at Amazon"
+      - "$2,300 at Amazon"
+      - "$4,600 at HP"
+      - "Save Up to $850 on Dell PCs and Accessories :"
+      - "Dell 16 DC16255 Ryzen 7 512GB SSD 16GB RAM 15.6-inch T"
+      - "Lenovo IdeaPad Slim 5 Ryzen AI 7 Radeon 860M 512GB SSD"
+      - "HP OmniBook X Flip Ryzen AI 7 Radeon 860M 512GB SSD 16"
+      - "Acer Aspire 14 AI Intel Ultra 7 1TB SSD 16GB RAM 14-in"
+      - "Asus Vivobook 14 Ryzen AI 7 512GB SSD 16GB RAM 14-inch"
   - file: ad_digitaltrends_laptops.html
     url: https://www.digitaltrends.com/computing/best-laptops/
-    ads: []
+    ads:
+      - "$799 Amazon $849 BrandsMart USA $999 Best Buy U.S. Mor"
+      - "$1968 UnbeatableSale.com $1199 Amazon $1603 Office Dep"
+      - "$949 Amazon"
+      - "$3146 Amazon $3399 Walmart.com More"
+      - "$1130 Amazon"
+      - "$1799 Amazon $1899 Best Buy U.S. $1804 Walmart.com Mor"
+      - "$399 Amazon"
+      - "$1095 Amazon"
+      - "$799 Amazon"
+      - "$849 BrandsMart USA"
+      - "$999 Best Buy U.S."
+      - "$1968 UnbeatableSale.com"
+      - "$1199 Amazon"
+      - "$1603 Office Depot and OfficeMax"
+      - "$3146 Amazon"
+      - "$3399 Walmart.com"
+      - "$1799 Amazon"
+      - "$1899 Best Buy U.S."
+      - "$1804 Walmart.com"
   - file: ad_habr_promo.html
     url: https://habr.com/ru/companies/skillfactory/articles/
     ads: []
@@ -54,6 +93,14 @@ pages:
       - "The other downside to a MacBook is that, well, it's a M"
       - "Our pick may seem like a bit more of a proper computer"
       - "On the other hand, you may already have a computer you'"
+      - "$1050 at Best Buy"
+      - "$345 at Walmart"
+      - "$1550 at Dell"
+      - "$1900 at Lenovo"
+      - "$999 at Apple"
+      - "$269 at Walmart"
+      - "$350 at Amazon $345 at Walmart"
+      - "$999 at Apple $999 at Amazon $999 at Best Buy"
   - file: ad_lifehacker_ru.html
     url: https://lifehacker.ru/
     ads: []
@@ -67,6 +114,10 @@ pages:
       - "However, should you need more power while remaining fir"
       - "Best Budget 2-in-1 Laptop: Lenovo IdeaPad Duet 5 With i"
       - "Best Budget Laptop for Gaming: Acer Nitro 5 With a powe"
+      - "$710 at Amazon"
+      - "$249 at Amazon"
+      - "See at Amazon"
+      - "$1000 at Amazon"
   - file: ad_pcworld_laptops.html
     url: https://www.pcworld.com/article/406345/best-laptops.html
     ads: []
@@ -82,9 +133,56 @@ pages:
       - "Surfshark One+"
       - "Proton Free"
       - "Proton VPN Plus"
+      - "1. NordVPN – the best VPN overall ($3.49 per month) No"
+      - "View Deal"
+      - "2. Surfshark – the best cheap VPN ($2.49 per month) Su"
+      - "3. Proton VPN – best for privacy ($2.99 per month) If "
+      - "4. ExpressVPN – best for Windows ($2.49 per month) Exp"
+      - "5. PrivadoVPN Free – the best free VPN We don’t advise"
+      - "Visit Site at NordVPN"
+      - "View"
+      - "Visit Site at Surfshark"
+      - "Visit Site at Proton VPN"
+      - "Visit Site at ExpressVPN"
+      - "Visit Site at PrivadoVPN"
   - file: ad_tomsguide_laptops.html
     url: https://www.tomsguide.com/best-picks/best-laptops
-    ads: []
+    ads:
+      - "View at P.C. Richard & Son"
+      - "View at Amazon"
+      - "Check Best Buy"
+      - "$1,169"
+      - "$1,297"
+      - "No price information"
+      - "$689"
+      - "$1,939.99"
+      - "$699.99"
+      - "$1,799.99"
+      - "$749.99"
+      - "$2,299"
+      - "$1,849"
+      - "$2,029"
+      - "$3,238.29"
+      - "View at Apple"
+      - "View at BHPhoto"
+      - "$599"
+      - "View at Dell"
+      - "Check Amazon"
+      - "View at Best Buy"
+      - "$3,169.99"
+      - "View at Newegg"
+      - "View at Lenovo"
+      - "View at Walmart"
+      - "$824.26"
+      - "$999.97"
+      - "View at Framework"
+      - "$2,759.99"
+      - "$2,999"
+      - "$3,599"
+      - "View at Samsung"
+      - "$2,942.35"
+      - "$3,741.99"
+      - "View Deal"
   - file: ad_vc_ru.html
     url: https://vc.ru/services
     ads: []
@@ -93,6 +191,11 @@ pages:
     ads:
       - "What is the best VPN service right now? My pick for the"
       - "ExpressVPN's new OpenBoundary function blocks child sex"
+      - "View now at NordVPN"
+      - "View now at Surfshark"
+      - "View now at ExpressVPN"
+      - "View now at CyberGhost"
+      - "View now at PIA"
   - file: clean_cloudflare_blog.html
     url: https://blog.cloudflare.com/dns-encryption-explained/
     ads: []
@@ -209,6 +312,7 @@ pages:
       - "Apple MacBook Neo: $699 @ Best Buy"
       - "Dell XPS 13: $699 @ Dell"
       - "HP OmniBook X Flip: $1,199 now $749 @ Best Buy"
+      - "View Deal"
   - file: ad_cnet_vpn.html
     url: https://www.cnet.com/tech/services-and-software/best-vpn/
     ads:
@@ -221,6 +325,16 @@ pages:
       - "Mullvad’s prices are about as straightforward as it gets"
       - "IPVanish is a decent beginner-friendly VPN for anyone se"
       - "Norton, long known for excellence in security products, "
+      - "See at ExpressVPN"
+      - "See at NordVPN"
+      - "See at Surfshark"
+      - "See at ProtonVPN"
+      - "See at Mullvad"
+      - "Proton VPN: $2.99 per Month (70% off 2-year plan) :"
+      - "Surfshark VPN: $2.49 per Month + 3 Months Extra (85% o"
+      - "ExpressVPN: $2.44 per Month + 4 Months Free (81% off 2"
+      - "NordVPN: $3.39 per Month (70% off 2-Year Plan) :"
+      - "Surfshark: $2.39 per Month + 4 Months Extra for 2-Year"
     native:
       - "ExpressVPN is CNET’s Editors’ Choice for the best VPN over"
       - "ExpressVPN cooked up inventive solutions on Lightway and O"

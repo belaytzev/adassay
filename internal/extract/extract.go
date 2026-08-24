@@ -18,6 +18,7 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 	type l1 struct {
 		findings []core.Finding
 		links    map[string][]core.Link
+		blocks   []block
 		visible  int
 		err      error
 	}
@@ -30,8 +31,8 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 		}
 		var findings []core.Finding
 		walk(doc, cfg, &findings)
-		links, visible := rawScan(doc)
-		done <- l1{findings: dedupe(findings), links: links, visible: visible}
+		links, blocks, visible := rawScan(doc)
+		done <- l1{findings: dedupe(findings), links: links, blocks: blocks, visible: visible}
 	}()
 
 	var base *url.URL
@@ -48,7 +49,7 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 		return core.Result{}, fmt.Errorf("extract: l1: %w", raw.err)
 	}
 
-	segs := segment(art.Node, raw.links)
+	segs := splice(segment(art.Node, raw.links), raw.blocks)
 	texts := make([]string, len(segs))
 	for i, s := range segs {
 		texts[i] = s.Text
@@ -74,8 +75,14 @@ func thin(text string, visible int) bool {
 	return visible >= minVisible && thinFactor*len([]rune(text)) < visible
 }
 
-func rawScan(root *html.Node) (map[string][]core.Link, int) {
+type block struct {
+	text  string
+	links []core.Link
+}
+
+func rawScan(root *html.Node) (map[string][]core.Link, []block, int) {
 	idx := map[string][]core.Link{}
+	var blocks []block
 	visible := 0
 	var rec func(*html.Node)
 	rec = func(n *html.Node) {
@@ -89,10 +96,14 @@ func rawScan(root *html.Node) (map[string][]core.Link, int) {
 				return
 			case isHeading(n.Data):
 				_, links := blockContent(n)
-				index(idx, clean(nodeText(n)), links)
-			case isBlock(n.Data):
-				text, links := blockContent(n)
-				index(idx, clean(text), links)
+				text := clean(nodeText(n))
+				index(idx, text, links)
+				blocks = append(blocks, block{text, links})
+			case isBlock(n.Data), leaf(n):
+				raw, links := blockContent(n)
+				text := clean(raw)
+				index(idx, text, links)
+				blocks = append(blocks, block{text, links})
 			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -100,7 +111,54 @@ func rawScan(root *html.Node) (map[string][]core.Link, int) {
 		}
 	}
 	rec(root)
-	return idx, visible
+	return idx, blocks, visible
+}
+
+func splice(segs []core.Segment, blocks []block) []core.Segment {
+	at := map[string]int{}
+	for i, s := range segs {
+		for _, line := range strings.Split(s.Text, "\n\n") {
+			if _, ok := at[line]; !ok {
+				at[line] = i
+			}
+		}
+	}
+	last := -1
+	for i, b := range blocks {
+		if _, ok := at[b.text]; ok {
+			last = i
+		}
+	}
+	extra := map[int][]block{}
+	anchor, n := -1, 0
+	for i, b := range blocks {
+		if i > last {
+			break
+		}
+		if a, ok := at[b.text]; ok {
+			anchor = a
+			continue
+		}
+		if anchor < 0 || b.text == "" || !core.Sponsored(b.links) {
+			continue
+		}
+		extra[anchor] = append(extra[anchor], b)
+		n++
+	}
+	if n == 0 {
+		return segs
+	}
+	out := make([]core.Segment, 0, len(segs)+n)
+	for i, s := range segs {
+		out = append(out, s)
+		for _, b := range extra[i] {
+			out = append(out, core.Segment{Text: b.text, Links: dedupeLinks(b.links)})
+		}
+	}
+	for i := range out {
+		out[i].ID = fmt.Sprintf("s%d", i+1)
+	}
+	return out
 }
 
 func index(idx map[string][]core.Link, key string, links []core.Link) {
@@ -129,6 +187,23 @@ var blockTags = map[string]bool{
 }
 
 func isBlock(tag string) bool { return blockTags[tag] }
+
+func leaf(n *html.Node) bool {
+	if n.Type != html.ElementNode || n.Data != "div" {
+		return false
+	}
+	var nested func(*html.Node) bool
+	nested = func(p *html.Node) bool {
+		for c := p.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode &&
+				(isBlock(c.Data) || isHeading(c.Data) || c.Data == "div" || nested(c)) {
+				return true
+			}
+		}
+		return false
+	}
+	return !nested(n)
+}
 
 func isHeading(tag string) bool {
 	return len(tag) == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6'
@@ -162,6 +237,10 @@ func (s *segmenter) walk(n *html.Node) {
 		case isBlock(n.Data):
 			text, links := blockContent(n)
 			s.emit(text, s.resolve(clean(text), links))
+		case leaf(n):
+			raw, links := blockContent(n)
+			text := clean(raw)
+			s.push(text, s.resolve(text, links))
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -182,6 +261,10 @@ func (s *segmenter) emit(text string, links []core.Link) {
 		text = strings.TrimSpace(s.pending + "\n\n" + text)
 		s.pending = ""
 	}
+	s.push(text, links)
+}
+
+func (s *segmenter) push(text string, links []core.Link) {
 	if text == "" {
 		return
 	}
@@ -203,7 +286,7 @@ func blockContent(n *html.Node) (string, []core.Link) {
 				b.WriteString(c.Data)
 				b.WriteString(" ")
 			case c.Type != html.ElementNode:
-			case isBlock(c.Data), isHeading(c.Data), c.Data == "script", c.Data == "style", classify(c) != "":
+			case isBlock(c.Data), isHeading(c.Data), leaf(c), c.Data == "script", c.Data == "style", classify(c) != "":
 			default:
 				if c.Data == "a" {
 					if href := attr(c, "href"); href != "" {

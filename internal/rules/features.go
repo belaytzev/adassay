@@ -13,7 +13,7 @@ import (
 
 func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 	fired := map[string]bool{
-		config.FeatureRelSponsored: relSponsored(seg.Links),
+		config.FeatureRelSponsored: core.Sponsored(seg.Links),
 		config.FeaturePromoCode:    promoCode(seg.Text, p.PromoWords),
 		config.FeatureAffiliate:    affiliate(seg.Links, p),
 		config.FeatureDisclaimer:   matchesAny(seg.Text, p.Disclaimers),
@@ -72,17 +72,6 @@ func brandDensity(text string, doc Doc) bool {
 	for b, n := range brands(text) {
 		if n >= 2 && doc.brand[b] <= 1 {
 			return true
-		}
-	}
-	return false
-}
-
-func relSponsored(links []core.Link) bool {
-	for _, l := range links {
-		for _, tok := range strings.Fields(l.Rel) {
-			if strings.EqualFold(tok, "sponsored") {
-				return true
-			}
 		}
 	}
 	return false

@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 
 	"adassay.com/internal/config"
+	"adassay.com/internal/core"
 )
 
 const filler = `<p>Обычный абзац статьи, который существует только для того, чтобы у экстрактора набралось достаточно текста для признания страницы читаемой. ` +
@@ -195,7 +197,7 @@ func TestRawScanKeysLinksByBlockText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	idx, visible := rawScan(root)
+	idx, blocks, visible := rawScan(root)
 	if visible == 0 {
 		t.Fatal("visible text not counted")
 	}
@@ -205,6 +207,9 @@ func TestRawScanKeysLinksByBlockText(t *testing.T) {
 	}
 	if _, ok := idx["Unrelated prose without any link at all."]; ok {
 		t.Error("a block without links must not be indexed")
+	}
+	if len(blocks) == 0 {
+		t.Fatal("no blocks collected")
 	}
 }
 
@@ -225,5 +230,165 @@ func TestThin(t *testing.T) {
 		if got := thin(c.text, c.visible); got != c.want {
 			t.Errorf("%s: thin(%d runes, %d visible) = %v, want %v", c.name, len(c.text), c.visible, got, c.want)
 		}
+	}
+}
+
+func parse(t *testing.T, doc string) *html.Node {
+	t.Helper()
+	root, err := html.Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	return root
+}
+
+func segmentDoc(t *testing.T, doc string) []string {
+	t.Helper()
+	root := parse(t, doc)
+	idx, _, _ := rawScan(root)
+	var out []string
+	for _, s := range segment(root, idx) {
+		out = append(out, s.Text)
+	}
+	return out
+}
+
+func TestSegmentLeafContainer(t *testing.T) {
+	got := segmentDoc(t, `<html><body>
+<p>Prose the article is made of.</p>
+<div class="btns"><a href="https://shop.example/p?tag=aff-7" rel="sponsored">Check Latest Price</a></div>
+</body></html>`)
+	if !has(got, "Check Latest Price") {
+		t.Errorf("a bare container with a buy link produced no segment: %q", got)
+	}
+}
+
+func TestSegmentNestedContainerEmitsOnce(t *testing.T) {
+	got := segmentDoc(t, `<html><body>
+<div class="card"><div class="price"><a href="https://shop.example/p" rel="sponsored">$1050 at Best Buy</a></div></div>
+</body></html>`)
+	n := 0
+	for _, s := range got {
+		if strings.Contains(s, "$1050 at Best Buy") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("nested containers emitted the same text %d times: %q", n, got)
+	}
+}
+
+func TestSegmentContainerInsideBlockIsNotDuplicated(t *testing.T) {
+	got := segmentDoc(t, `<html><body>
+<li>Outer list text<div><a href="https://shop.example/p" rel="sponsored">Buy now</a></div></li>
+</body></html>`)
+	for _, s := range got {
+		if strings.Contains(s, "Outer list text") && strings.Contains(s, "Buy now") {
+			t.Errorf("container text leaked into its block ancestor: %q", s)
+		}
+	}
+	if !has(got, "Buy now") || !has(got, "Outer list text") {
+		t.Errorf("both blocks must survive separately: %q", got)
+	}
+}
+
+func TestSegmentHeadingSkipsContainers(t *testing.T) {
+	got := segmentDoc(t, `<html><body>
+<h2>Section heading</h2>
+<div><a href="https://shop.example/p" rel="sponsored">View Deal</a></div>
+<p>The prose the heading introduces.</p>
+</body></html>`)
+	if !has(got, "Section heading\n\nThe prose the heading introduces.") {
+		t.Errorf("a buy button stole the heading from the prose: %q", got)
+	}
+	if !has(got, "View Deal") {
+		t.Errorf("the button lost its own segment: %q", got)
+	}
+}
+
+func sponsoredBlock(text string) block {
+	return block{text: text, links: []core.Link{{Href: "https://shop.example/p?tag=aff-7", Rel: "nofollow sponsored"}}}
+}
+
+func spliceTexts(segs []core.Segment, blocks []block) []string {
+	var out []string
+	for _, s := range splice(segs, blocks) {
+		out = append(out, s.Text)
+	}
+	return out
+}
+
+func TestSpliceRestoresSponsoredBlockInPlace(t *testing.T) {
+	segs := []core.Segment{{ID: "s1", Text: "First paragraph."}, {ID: "s2", Text: "Second paragraph."}}
+	blocks := []block{
+		{text: "First paragraph."},
+		sponsoredBlock("$1050 at Best Buy"),
+		{text: "Second paragraph."},
+	}
+	got := splice(segs, blocks)
+	var texts []string
+	for i, s := range got {
+		texts = append(texts, s.Text)
+		if want := fmt.Sprintf("s%d", i+1); s.ID != want {
+			t.Errorf("id = %q, want %q", s.ID, want)
+		}
+	}
+	want := []string{"First paragraph.", "$1050 at Best Buy", "Second paragraph."}
+	if strings.Join(texts, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %q, want %q", texts, want)
+	}
+	if len(got[1].Links) != 1 {
+		t.Errorf("restored block lost its links: %+v", got[1])
+	}
+}
+
+func TestSpliceIgnoresBlocksWithoutASponsoredLink(t *testing.T) {
+	segs := []core.Segment{{ID: "s1", Text: "First paragraph."}, {ID: "s2", Text: "Second paragraph."}}
+	blocks := []block{
+		{text: "First paragraph."},
+		{text: "Share on Twitter", links: []core.Link{{Href: "https://twitter.com/intent"}}},
+		{text: "Second paragraph."},
+	}
+	if got := spliceTexts(segs, blocks); len(got) != 2 {
+		t.Errorf("readability's own pruning was undone: %q", got)
+	}
+}
+
+func TestSpliceIgnoresBlocksOutsideTheArticle(t *testing.T) {
+	segs := []core.Segment{{ID: "s1", Text: "The only paragraph."}}
+	blocks := []block{
+		sponsoredBlock("Header banner"),
+		{text: "The only paragraph."},
+		sponsoredBlock("Footer banner"),
+	}
+	if got := spliceTexts(segs, blocks); len(got) != 1 {
+		t.Errorf("chrome outside the article body was pulled in: %q", got)
+	}
+}
+
+func TestExtractRecoversAffiliateButtons(t *testing.T) {
+	page, err := os.ReadFile(filepath.Join("testdata", "thirstybear.html"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	res, err := Extract(page, "https://www.thirstybear.com/best-monitors-for-programming/", testCfg(t))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	buttons := 0
+	for _, s := range res.Segments {
+		if s.Text != "Check Latest Price" && s.Text != "Check Price" {
+			continue
+		}
+		if !core.Sponsored(s.Links) {
+			t.Fatalf("button segment carries no sponsored link: %+v", s)
+		}
+		buttons++
+	}
+	if buttons == 0 {
+		t.Fatal("the affiliate buttons readability strips never became segments")
+	}
+	if buttons > len(res.Segments)/8 {
+		t.Fatalf("%d of %d segments are buy buttons: recovery is too loose", buttons, len(res.Segments))
 	}
 }

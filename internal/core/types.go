@@ -114,3 +114,14 @@ type Link struct {
 	Rel  string `json:"rel,omitempty"`
 	Text string `json:"text,omitempty"`
 }
+
+func Sponsored(links []Link) bool {
+	for _, l := range links {
+		for _, tok := range strings.Fields(l.Rel) {
+			if strings.EqualFold(tok, "sponsored") {
+				return true
+			}
+		}
+	}
+	return false
+}
