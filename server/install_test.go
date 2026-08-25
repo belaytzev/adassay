@@ -356,9 +356,8 @@ func TestChangingTheVerdictDropsPublication(t *testing.T) {
 		t.Fatal("the seeded verdict was not published")
 	}
 
-	// One reputable install weighs as much as the quorum on its own, so it can
-	// carry a different verdict all the way to the upsert with a single
-	// confirmation behind it.
+	// One reputable install weighs a whole quorum, so it can carry a different
+	// verdict all the way to the upsert.
 	challenger := client(43)
 	seedInstall(t, st, challenger)
 	if _, err := st.conn().Exec(`UPDATE installs SET upheld = 2 WHERE client_id = ?`, challenger); err != nil {
@@ -369,9 +368,17 @@ func TestChangingTheVerdictDropsPublication(t *testing.T) {
 	}); code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", code)
 	}
+	if !published(t, st, hash) {
+		t.Fatal("the challenger's own weight is a quorum, so its verdict stands on that")
+	}
 
+	// Take that weight away. What is left is the seeder's vouch, and it was for
+	// the verdict this one replaced.
+	if _, err := st.conn().Exec(`UPDATE installs SET refuted = 1 WHERE client_id = ?`, challenger); err != nil {
+		t.Fatalf("refuted: %v", err)
+	}
 	if published(t, st, hash) {
-		t.Error("an earlier vouch was for the earlier answer: carrying publication onto a verdict " +
-			"that replaced it serves one install's opinion to everyone")
+		t.Error("a replaced verdict must not keep being served on the vouch its predecessor earned: " +
+			"once the backing behind the new one is gone, nothing is left to serve it on")
 	}
 }

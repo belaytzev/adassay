@@ -322,7 +322,10 @@ every write. Only a hash of the secret is stored, so a leaked database cannot fo
 **Quorum counts weight, not heads.** A verdict is not served until enough independent installs
 agree. A fresh install carries zero weight for its first day, an established one carries 1,
 confirmed contributions raise it to at most 4, refuted ones sink it back. Registering in bulk
-buys patience, not influence.
+buys patience, not influence. The same weighted sum decides both questions — whether a write is
+accepted and whether a verdict is served — so nothing can be accepted and then not served, or
+the reverse. Seeded verdicts are the one exception, and they carry their own flag rather than
+a forged count; see below.
 
 **Write limits.** One verdict per second per address, burst 256, charged per record rather
 than per request. When the table of tracked addresses fills and nothing can be pruned, new

@@ -174,10 +174,9 @@ func (s *Store) countVerdicts() (published, quarantined int, err error) {
 	var total int
 	err = s.conn().QueryRow(
 		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN v.published = 1 OR
-			(SELECT COUNT(*) FROM confirmations c
-			 WHERE c.hash = v.hash AND c.norm_version = v.norm_version
-			   AND c.verdict = v.verdict) >= ? THEN 1 ELSE 0 END), 0)
-		 FROM verdicts v`, s.quorum).Scan(&total, &published)
+			`+backersOf(s.d.clampSum)+` >= ? THEN 1 ELSE 0 END), 0)
+		 FROM verdicts v`,
+		installMaxWeit, refutedPenalty, backersCutoff(), s.quorum).Scan(&total, &published)
 	if err != nil {
 		return 0, 0, fmt.Errorf("server: stats: %w", err)
 	}
@@ -188,13 +187,10 @@ func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, erro
 	rows, err := s.conn().Query(
 		`SELECT v.hash, v.verdict, v.reasons, v.source, v.votes FROM verdicts v
 		 WHERE v.norm_version = ? AND v.prefix = ?
-		   AND (v.published = 1
-		        OR (SELECT COUNT(*) FROM confirmations c
-		            WHERE c.hash = v.hash AND c.norm_version = v.norm_version
-		              AND c.verdict = v.verdict) >= ?)
+		   AND (v.published = 1 OR `+backersOf(s.d.clampSum)+` >= ?)
 		 ORDER BY v.hash
 		 LIMIT ?`,
-		normVersion, prefix, s.quorum, maxBucket)
+		normVersion, prefix, installMaxWeit, refutedPenalty, backersCutoff(), s.quorum, maxBucket)
 	if err != nil {
 		return nil, fmt.Errorf("server: bucket: %w", err)
 	}

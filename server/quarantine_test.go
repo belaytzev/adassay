@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"adassay.com/internal/core"
 	"adassay.com/internal/store"
@@ -454,5 +455,44 @@ func TestFailedBackfillLeavesNoColumnBehind(t *testing.T) {
 	if has != 0 {
 		t.Error("a committed column with an unapplied backfill is unrecoverable: the next start sees " +
 			"the column, skips the block, and every seeded verdict stays dark for good")
+	}
+}
+
+func freshInstall(t *testing.T, st *Store, id string) {
+	t.Helper()
+	seedInstall(t, st, id)
+	if _, err := st.conn().Exec(`UPDATE installs SET created = ? WHERE client_id = ?`,
+		time.Now().Unix(), id); err != nil {
+		t.Fatalf("fresh install: %v", err)
+	}
+}
+
+func TestServingCountsWeightNotHeads(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := store.HexHash("вердикт, подтверждённый вчерашними установками")
+	entry := core.SubmitEntry{Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceRules}
+
+	for i := 51; i < 54; i++ {
+		freshInstall(t, st, client(i))
+		if code := submitAs(t, mux, client(i), "", "", entry); code != http.StatusOK {
+			t.Fatalf("submit %d: status = %d, want 200", i, code)
+		}
+	}
+
+	if published(t, st, hash) {
+		t.Error("an install carries no weight for its first day, so three of them are three heads and " +
+			"no quorum: serving on a raw confirmation count hands the database to whoever registers " +
+			"the most clients")
+	}
+
+	// The same three, once they have aged, are the quorum they always were.
+	if _, err := st.conn().Exec(`UPDATE installs SET created = ?`,
+		time.Now().Add(-30*24*time.Hour).Unix()); err != nil {
+		t.Fatalf("age installs: %v", err)
+	}
+	if !published(t, st, hash) {
+		t.Error("aged installs weigh 1 each, so three of them meet a quorum of 3")
 	}
 }

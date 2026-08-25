@@ -35,8 +35,24 @@ func confirm(ex execer, hash string, normVersion int, clientID, verdict, source 
 	return nil
 }
 
+// The predicate the read paths use to decide whether a verdict is served. It
+// has to agree with backers below: one count decides what is accepted, the
+// other what is served, and a verdict accepted but never served — or served
+// on backing that was refused — is the defect that keeps coming back.
+//
+// Correlated on `v`, so the caller selects FROM verdicts v. Its placeholders
+// are the two clamp bounds and the age cutoff, in that order.
+func backersOf(clamp string) string {
+	return `(SELECT COALESCE(SUM(` + clamp + `), 0)
+	         FROM confirmations c JOIN installs i ON i.client_id = c.client_id
+	         WHERE c.hash = v.hash AND c.norm_version = v.norm_version
+	           AND c.verdict = v.verdict AND i.created <= ?)`
+}
+
+func backersCutoff() int64 { return time.Now().Add(-installMinAge).Unix() }
+
 func backers(ex queryer, clamp, hash string, normVersion int, verdict string) (int, error) {
-	cutoff := time.Now().Add(-installMinAge).Unix()
+	cutoff := backersCutoff()
 	var n int
 	err := ex.QueryRow(
 		`SELECT COALESCE(SUM(`+clamp+`), 0)
