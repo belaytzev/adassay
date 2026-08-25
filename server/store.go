@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS verdicts (
 	reasons      TEXT    NOT NULL DEFAULT '',
 	source       TEXT    NOT NULL,
 	votes        INTEGER NOT NULL DEFAULT 0,
+	published    INTEGER NOT NULL DEFAULT 0,
 	updated      INTEGER NOT NULL,
 	PRIMARY KEY (hash, norm_version)
 );
@@ -86,6 +87,22 @@ func openStore(dsn string) (*Store, error) {
 		}
 	}
 
+	var hasPublished int
+	if err := st.conn().QueryRow(d.hasColumn("verdicts", "published")).Scan(&hasPublished); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("server: inspect verdicts: %w", err)
+	}
+	if hasPublished == 0 {
+		if _, err := db.Exec(`ALTER TABLE verdicts ADD COLUMN published INTEGER NOT NULL DEFAULT 0`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("server: migrate published: %w", err)
+		}
+		if _, err := db.Exec(`UPDATE verdicts SET published = 1 WHERE source = 'seed'`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("server: backfill published: %w", err)
+		}
+	}
+
 	var hasSeeder int
 	if err := st.conn().QueryRow(d.hasColumn("installs", "seeder")).Scan(&hasSeeder); err != nil {
 		db.Close()
@@ -140,7 +157,7 @@ func (s *Store) stats() (published, quarantined int, err error) {
 func (s *Store) countVerdicts() (published, quarantined int, err error) {
 	var total int
 	err = s.conn().QueryRow(
-		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN v.source = 'seed' OR
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN v.published = 1 OR
 			(SELECT COUNT(*) FROM confirmations c
 			 WHERE c.hash = v.hash AND c.norm_version = v.norm_version
 			   AND c.verdict = v.verdict) >= ? THEN 1 ELSE 0 END), 0)
@@ -155,7 +172,7 @@ func (s *Store) Bucket(prefix string, normVersion int) ([]core.BucketEntry, erro
 	rows, err := s.conn().Query(
 		`SELECT v.hash, v.verdict, v.reasons, v.source, v.votes FROM verdicts v
 		 WHERE v.norm_version = ? AND v.prefix = ?
-		   AND (v.source = 'seed'
+		   AND (v.published = 1
 		        OR (SELECT COUNT(*) FROM confirmations c
 		            WHERE c.hash = v.hash AND c.norm_version = v.norm_version
 		              AND c.verdict = v.verdict) >= ?)
@@ -197,21 +214,26 @@ type queryer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-func upsert(ex execer, e core.BucketEntry, normVersion int) error {
+func upsert(ex execer, e core.BucketEntry, normVersion int, published bool) error {
 	if !core.ValidSource(e.Source) {
 		return fmt.Errorf("server: unknown source %q", e.Source)
 	}
+	flag := 0
+	if published {
+		flag = 1
+	}
 	_, err := ex.Exec(
-		`INSERT INTO verdicts (hash, norm_version, prefix, verdict, reasons, source, votes, updated)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO verdicts (hash, norm_version, prefix, verdict, reasons, source, votes, published, updated)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (hash, norm_version) DO UPDATE SET
-		 	verdict = excluded.verdict,
-		 	reasons = excluded.reasons,
-		 	source  = excluded.source,
-		 	votes   = excluded.votes,
-		 	updated = excluded.updated`,
+		 	verdict   = excluded.verdict,
+		 	reasons   = excluded.reasons,
+		 	source    = excluded.source,
+		 	votes     = excluded.votes,
+		 	published = excluded.published,
+		 	updated   = excluded.updated`,
 		e.Hash, normVersion, e.Hash[:core.PrefixLen], e.Verdict.String(),
-		encodeReasons(e.Reasons), e.Source, e.Votes, time.Now().Unix())
+		encodeReasons(e.Reasons), e.Source, e.Votes, flag, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("server: put: %w", err)
 	}
@@ -264,22 +286,28 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 	row := core.BucketEntry{Hash: e.Hash, Verdict: e.Verdict, Reasons: e.Reasons, Source: e.Source}
 
 	var curVerdict, curSource, curReasons string
-	var curVotes int
+	var curVotes, curPublished int
 	challenger, refused := false, false
+
+	// Publication is its own fact, not a shade of source: a row can be served
+	// because a seeder vouched for it while still recording who decided it.
+	publish := false
 	switch err := s.tx(tx).QueryRow(
-		`SELECT verdict, source, reasons, votes FROM verdicts WHERE hash = ? AND norm_version = ?`,
-		e.Hash, normVersion).Scan(&curVerdict, &curSource, &curReasons, &curVotes); {
+		`SELECT verdict, source, reasons, votes, published FROM verdicts WHERE hash = ? AND norm_version = ?`,
+		e.Hash, normVersion).Scan(&curVerdict, &curSource, &curReasons, &curVotes, &curPublished); {
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:
 		return false, 0, fmt.Errorf("server: submit: %w", err)
 
 	case curVerdict == e.Verdict.String():
 		row.Source, row.Reasons = curSource, decodeReasons(curReasons)
+		publish = curPublished == 1
 
 	case sourceRank(e.Source) < sourceRank(curSource) && curVotes >= s.quorum:
 		s.mx.diverged()
 		refused = true
 	default:
+		// The verdict itself changed, so an earlier vouch does not carry.
 		s.mx.diverged()
 		challenger = true
 	}
@@ -301,12 +329,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 
 	reach := n
 	if seeder && e.Source == core.SourceSeed {
-		// Only where it does not demote: a row people adjudicated keeps its
-		// source and the rank guard that comes with it. Such a row already
-		// carries quorum, so it publishes without the seed mark anyway.
-		if sourceRank(row.Source) <= sourceRank(core.SourceSeed) {
-			row.Source, row.Reasons = core.SourceSeed, e.Reasons
-		}
+		publish = true
 		if reach < s.quorum {
 			reach = s.quorum
 		}
@@ -319,7 +342,7 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 		return true, curVotes, nil
 	}
 	row.Votes = n
-	if err := upsert(btx, row, normVersion); err != nil {
+	if err := upsert(btx, row, normVersion, publish); err != nil {
 		return false, 0, err
 	}
 	if err := tx.Commit(); err != nil {

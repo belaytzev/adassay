@@ -214,9 +214,9 @@ func TestSeedPublishesWhenItAgreesWithAnExistingVerdict(t *testing.T) {
 		t.Fatal("a seeder that agrees with a quarantined verdict must publish it: agreeing with " +
 			"someone else is the common case once the database has users, not the rare one")
 	}
-	if got := stored(t, st, hash); got.Source != core.SourceSeed {
-		t.Errorf("source = %q, want %q: the read path publishes on the source, so a row the write "+
-			"path decided to publish has to carry it", got.Source, core.SourceSeed)
+	if got := stored(t, st, hash); got.Source != core.SourceRules {
+		t.Errorf("source = %q, want %q: publication is its own fact, so vouching for a verdict must "+
+			"not rewrite who decided it", got.Source, core.SourceRules)
 	}
 }
 
@@ -278,5 +278,65 @@ func TestSeedDoesNotDemoteAHumanVerdict(t *testing.T) {
 	if got := stored(t, st, hash); got.Source != core.SourceHuman {
 		t.Errorf("source = %q, want %q: agreeing with people must not take their decision's "+
 			"provenance, nor the rank guard that protects it", got.Source, core.SourceHuman)
+	}
+}
+
+func TestSeedPublishesASubQuorumHumanVerdict(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := strings.Repeat("1", 64)
+
+	voter := client(41)
+	seedInstall(t, st, voter)
+	if code := voteAs(t, mux, voter, hash, core.Drop); code != http.StatusOK {
+		t.Fatalf("vote: status = %d, want 200", code)
+	}
+	if published(t, st, hash) {
+		t.Fatal("one vote is below quorum, so the verdict must still be quarantined")
+	}
+
+	seedInstall(t, st, testClient)
+	markSeeder(t, st, testClient)
+	submit(t, st, core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceSeed,
+	})
+
+	if !published(t, st, hash) {
+		t.Error("a single vote creates a human row with no quorum behind it, so treating every human " +
+			"row as already published leaves it quarantined for good")
+	}
+	if got := stored(t, st, hash); got.Source != core.SourceHuman {
+		t.Errorf("source = %q, want %q: publishing it must not take the provenance", got.Source, core.SourceHuman)
+	}
+}
+
+func TestPublicationSurvivesAnOrdinaryAgreement(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := strings.Repeat("2", 64)
+	entry := core.SubmitEntry{Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}}
+
+	seedInstall(t, st, testClient)
+	markSeeder(t, st, testClient)
+	seeded := entry
+	seeded.Source = core.SourceSeed
+	submit(t, st, seeded)
+	if !published(t, st, hash) {
+		t.Fatal("the seeded verdict was not published")
+	}
+
+	later := client(42)
+	seedInstall(t, st, later)
+	agreeing := entry
+	agreeing.Source = core.SourceRules
+	if code := submitAs(t, mux, later, "", "", agreeing); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+
+	if !published(t, st, hash) {
+		t.Error("someone agreeing with a published verdict must not unpublish it: the row is " +
+			"rewritten on every submit, so the flag has to be carried rather than defaulted")
 	}
 }

@@ -396,3 +396,33 @@ func TestUnconfirmedRowDoesNotOutrankAQuorum(t *testing.T) {
 		t.Fatalf("verdict = %v, %v; want keep: three clients derived it against one unconfirmed claim", v, ok)
 	}
 }
+
+func TestUpgradeKeepsServingWhatSourceSeedUsedToPublish(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-seed.db")
+	hash := store.HexHash("сегмент, опубликованный по source=seed")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open legacy: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE verdicts (
+		hash TEXT NOT NULL, norm_version INTEGER NOT NULL, prefix TEXT NOT NULL,
+		verdict TEXT NOT NULL, reasons TEXT NOT NULL DEFAULT '', source TEXT NOT NULL,
+		votes INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL,
+		PRIMARY KEY (hash, norm_version));
+		INSERT INTO verdicts VALUES (?, ?, ?, ?, '', 'seed', 3, 0)`,
+		hash, core.NormVersion, hash[:core.PrefixLen], core.Drop.String()); err != nil {
+		t.Fatalf("legacy schema: %v", err)
+	}
+	db.Close()
+
+	st, err := openStore(path)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	if !published(t, st, hash) {
+		t.Error("rows the old build served on source = 'seed' must stay served after the flag " +
+			"takes over: the upgrade would otherwise blank a live bucket with no way back")
+	}
+}

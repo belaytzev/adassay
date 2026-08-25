@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Store) put(e core.BucketEntry, normVersion int) error {
-	if err := upsert(s.db, e, normVersion); err != nil {
+	if err := upsert(s.db, e, normVersion, false); err != nil {
 		return err
 	}
 	for i := 0; i < s.quorum; i++ {
