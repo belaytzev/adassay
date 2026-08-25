@@ -121,7 +121,7 @@ func seed(args []string, stdout io.Writer) error {
 		}
 		dropped += n + len(res.Hidden)
 		fmt.Fprintf(stdout, "  %s: %d segments, %d dropped, %d hidden\n", short(u), len(res.Segments), n, len(res.Hidden))
-		out.Record(res, nil)
+		out.Record(res, p.Adopted)
 	}
 
 	fmt.Fprintf(stdout, "seed: %d visited, %d failed, %d verdicts queued\n", visited, failed, dropped)

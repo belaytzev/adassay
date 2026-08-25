@@ -39,11 +39,18 @@ run() {
 }
 
 # One pass at a time: a run can outlive its cron slot, and two crawlers from one
-# IP is exactly the pattern publishers block.
+# IP is exactly the pattern publishers block. -E gives a busy lock its own code,
+# so a failing pass is not mistaken for a concurrent one and still exits nonzero
+# — cron and exit-status monitoring are the only thing watching this.
 if [ -z "${ADASSAY_LOCKED:-}" ] && command -v flock >/dev/null 2>&1; then
 	ADASSAY_LOCKED=1
 	export ADASSAY_LOCKED
-	flock -n "$LOCK" "$0" "$@" || echo "seed: another pass is already running" >&2
-	exit 0
+	code=0
+	flock -n -E 99 "$LOCK" "$0" "$@" || code=$?
+	if [ "$code" -eq 99 ]; then
+		echo "seed: another pass is already running" >&2
+		exit 0
+	fi
+	exit "$code"
 fi
 run

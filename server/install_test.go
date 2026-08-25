@@ -184,3 +184,71 @@ func TestMarkSeedersGrantsAndRevokes(t *testing.T) {
 		t.Errorf("loadInstall(%s).seeder = %v, %v; want true", other, in.seeder, err)
 	}
 }
+
+func TestSeedPublishesWhenItAgreesWithAnExistingVerdict(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := strings.Repeat("d", 64)
+
+	first := client(21)
+	seedInstall(t, st, first)
+	if code := submitAs(t, mux, first, "", "", core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceRules,
+	}); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if published(t, st, hash) {
+		t.Fatal("one ordinary install is below quorum, so the verdict must still be quarantined")
+	}
+
+	seedInstall(t, st, testClient)
+	markSeeder(t, st, testClient)
+	resp := submit(t, st, core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceSeed,
+	})
+	if resp.Accepted != 1 {
+		t.Fatalf("response = %+v, want the seeded verdict accepted", resp)
+	}
+	if !published(t, st, hash) {
+		t.Fatal("a seeder that agrees with a quarantined verdict must publish it: agreeing with " +
+			"someone else is the common case once the database has users, not the rare one")
+	}
+	if got := stored(t, st, hash); got.Source != core.SourceSeed {
+		t.Errorf("source = %q, want %q: the read path publishes on the source, so a row the write "+
+			"path decided to publish has to carry it", got.Source, core.SourceSeed)
+	}
+}
+
+func TestSeedGrantsNoRankProtectionToAnEarlierVerdict(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := strings.Repeat("e", 64)
+
+	first := client(22)
+	seedInstall(t, st, first)
+	if code := submitAs(t, mux, first, "", "", core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"model_judgement"}, Source: core.SourceOllama,
+	}); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+
+	seedInstall(t, st, testClient)
+	markSeeder(t, st, testClient)
+	submit(t, st, core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceSeed,
+	})
+
+	challenger := client(23)
+	seedInstall(t, st, challenger)
+	if code := submitAs(t, mux, challenger, "", "", core.SubmitEntry{
+		Hash: hash, Verdict: core.Keep, Source: core.SourceRules,
+	}); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if got := stored(t, st, hash).Votes; got >= st.quorum {
+		t.Errorf("votes = %d, want below quorum %d: one seeder agreeing is one backer, and storing "+
+			"a synthetic quorum locks out every later challenger by rank", got, st.quorum)
+	}
+}

@@ -298,11 +298,16 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 	if err != nil {
 		return false, 0, err
 	}
-	if seeder && e.Source == core.SourceSeed && n < s.quorum {
-		n = s.quorum
+
+	reach := n
+	if seeder && e.Source == core.SourceSeed {
+		row.Source, row.Reasons = core.SourceSeed, e.Reasons
+		if reach < s.quorum {
+			reach = s.quorum
+		}
 	}
 
-	if challenger && n < s.quorum {
+	if challenger && reach < s.quorum {
 		if err := tx.Commit(); err != nil {
 			return false, 0, fmt.Errorf("server: submit: %w", err)
 		}
