@@ -35,3 +35,28 @@ is deliberate — the contract belongs to both sides, so it lives on neither.
 Tests here do import the MIT client (`internal/share`) to check that what a client queues is
 what a server accepts. That direction is fine: AGPL code may use MIT code. The reverse would
 not be.
+
+## Upgrades that add a column
+
+Migrations run at startup, inside a transaction, and are skipped once the
+column exists. That is safe on its own and unsafe during a rolling update: the
+old replica keeps serving while the new one migrates, and its writes do not
+mention the new column, so they land on the default. Nothing runs the backfill
+a second time, because by then the column is there.
+
+Two ways out, and the second is what the cluster uses:
+
+- take the old replica down first (`replicas: 1`, or a `Recreate` strategy for
+  that one deploy), so nothing writes across the migration
+- run the backfill again once the rollout has finished. It is the same
+  statement the migration runs and it is idempotent:
+
+```sql
+UPDATE verdicts SET published = 1 WHERE source = 'seed' AND published = 0;
+```
+
+`UPDATE 0` means the window was empty. Anything else is what the old replica
+wrote while both were up, and it has just been repaired.
+
+The same shape applies to the next column: write the backfill so it can be run
+again by hand, and say so here.
