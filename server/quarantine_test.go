@@ -426,3 +426,33 @@ func TestUpgradeKeepsServingWhatSourceSeedUsedToPublish(t *testing.T) {
 			"takes over: the upgrade would otherwise blank a live bucket with no way back")
 	}
 }
+
+func TestFailedBackfillLeavesNoColumnBehind(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "half-migrated.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	// No `source` column, so the ALTER succeeds and the backfill cannot.
+	if _, err := db.Exec(`CREATE TABLE verdicts (
+		hash TEXT NOT NULL, norm_version INTEGER NOT NULL, prefix TEXT NOT NULL,
+		verdict TEXT NOT NULL, votes INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL,
+		PRIMARY KEY (hash, norm_version))`); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+
+	if err := migratePublished(db); err == nil {
+		t.Fatal("the backfill cannot succeed against this table, so the migration must report failure")
+	}
+
+	var has int
+	if err := db.QueryRow(sqliteDialect.hasColumn("verdicts", "published")).Scan(&has); err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if has != 0 {
+		t.Error("a committed column with an unapplied backfill is unrecoverable: the next start sees " +
+			"the column, skips the block, and every seeded verdict stays dark for good")
+	}
+}

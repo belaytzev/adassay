@@ -340,3 +340,38 @@ func TestPublicationSurvivesAnOrdinaryAgreement(t *testing.T) {
 			"rewritten on every submit, so the flag has to be carried rather than defaulted")
 	}
 }
+
+func TestChangingTheVerdictDropsPublication(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := strings.Repeat("3", 64)
+
+	seedInstall(t, st, testClient)
+	markSeeder(t, st, testClient)
+	submit(t, st, core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceSeed,
+	})
+	if !published(t, st, hash) {
+		t.Fatal("the seeded verdict was not published")
+	}
+
+	// One reputable install weighs as much as the quorum on its own, so it can
+	// carry a different verdict all the way to the upsert with a single
+	// confirmation behind it.
+	challenger := client(43)
+	seedInstall(t, st, challenger)
+	if _, err := st.conn().Exec(`UPDATE installs SET upheld = 2 WHERE client_id = ?`, challenger); err != nil {
+		t.Fatalf("upheld: %v", err)
+	}
+	if code := submitAs(t, mux, challenger, "", "", core.SubmitEntry{
+		Hash: hash, Verdict: core.Keep, Source: core.SourceRules,
+	}); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+
+	if published(t, st, hash) {
+		t.Error("an earlier vouch was for the earlier answer: carrying publication onto a verdict " +
+			"that replaced it serves one install's opinion to everyone")
+	}
+}

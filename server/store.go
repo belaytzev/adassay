@@ -93,13 +93,9 @@ func openStore(dsn string) (*Store, error) {
 		return nil, fmt.Errorf("server: inspect verdicts: %w", err)
 	}
 	if hasPublished == 0 {
-		if _, err := db.Exec(`ALTER TABLE verdicts ADD COLUMN published INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if err := migratePublished(db); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("server: migrate published: %w", err)
-		}
-		if _, err := db.Exec(`UPDATE verdicts SET published = 1 WHERE source = 'seed'`); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("server: backfill published: %w", err)
 		}
 	}
 
@@ -133,6 +129,26 @@ func migrateSourceRank(db *sql.DB, d dialect) error {
 	}
 
 	if _, err := tx.Exec(d.rebind(`UPDATE confirmations SET source_rank = ?`), sourceRank(core.SourceHuman)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// The backfill has to commit with the column: a committed ALTER whose UPDATE
+// never ran leaves every seeded verdict at published = 0, and the next start
+// sees the column and skips the block for good. It also keeps a second replica
+// from observing the column mid-migration and skipping the backfill itself.
+func migratePublished(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`ALTER TABLE verdicts ADD COLUMN published INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE verdicts SET published = 1 WHERE source = 'seed'`); err != nil {
 		return err
 	}
 	return tx.Commit()
