@@ -427,3 +427,20 @@ func TestAdoptedMarksVerdictsTakenFromElsewhere(t *testing.T) {
 		t.Error("a segment the rules decided here must not count as adopted")
 	}
 }
+
+func TestAdoptedDoesNotSurviveIntoTheNextRun(t *testing.T) {
+	cache := newCache()
+	cache.put(adText, store.Record{Verdict: core.Drop, Reasons: []string{"reviewed by hand"}, Source: core.SourceHuman})
+	p := &Pipeline{Cfg: testConfig(t), Cache: cache, Log: quiet()}
+
+	run(t, p, core.Segment{ID: "s1", Text: adText, Links: adLinks})
+	if !p.Adopted["s1"] {
+		t.Fatal("a cached human verdict must be adopted, or this test proves nothing")
+	}
+
+	run(t, p, core.Segment{ID: "s1", Text: plainText})
+	if p.Adopted["s1"] {
+		t.Error("segment ids restart at s1 on every page, so an adopted set carried over from the " +
+			"previous run silences this page's verdicts by number rather than by what was decided")
+	}
+}

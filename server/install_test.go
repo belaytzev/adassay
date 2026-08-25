@@ -252,3 +252,31 @@ func TestSeedGrantsNoRankProtectionToAnEarlierVerdict(t *testing.T) {
 			"a synthetic quorum locks out every later challenger by rank", got, st.quorum)
 	}
 }
+
+func TestSeedDoesNotDemoteAHumanVerdict(t *testing.T) {
+	st := newTestStore(t)
+	st.quorum = 3
+	mux := testMux(st)
+	hash := strings.Repeat("f", 64)
+
+	for i := 31; i < 34; i++ {
+		seedInstall(t, st, client(i))
+		if code := voteAs(t, mux, client(i), hash, core.Drop); code != http.StatusOK {
+			t.Fatalf("vote %d: status = %d, want 200", i, code)
+		}
+	}
+	if got := stored(t, st, hash); got.Source != core.SourceHuman {
+		t.Fatalf("source = %q, want %q before the seeder arrives", got.Source, core.SourceHuman)
+	}
+
+	seedInstall(t, st, testClient)
+	markSeeder(t, st, testClient)
+	submit(t, st, core.SubmitEntry{
+		Hash: hash, Verdict: core.Drop, Reasons: []string{"disclaimer"}, Source: core.SourceSeed,
+	})
+
+	if got := stored(t, st, hash); got.Source != core.SourceHuman {
+		t.Errorf("source = %q, want %q: agreeing with people must not take their decision's "+
+			"provenance, nor the rank guard that protects it", got.Source, core.SourceHuman)
+	}
+}

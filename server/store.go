@@ -301,7 +301,12 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 
 	reach := n
 	if seeder && e.Source == core.SourceSeed {
-		row.Source, row.Reasons = core.SourceSeed, e.Reasons
+		// Only where it does not demote: a row people adjudicated keeps its
+		// source and the rank guard that comes with it. Such a row already
+		// carries quorum, so it publishes without the seed mark anyway.
+		if sourceRank(row.Source) <= sourceRank(core.SourceSeed) {
+			row.Source, row.Reasons = core.SourceSeed, e.Reasons
+		}
 		if reach < s.quorum {
 			reach = s.quorum
 		}

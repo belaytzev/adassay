@@ -48,6 +48,10 @@ var priority = map[string]int{
 func Outranks(a, b string) bool { return priority[a] > priority[b] }
 
 func (p *Pipeline) Run(res core.Result) (core.Result, error) {
+	// Segment ids restart at s1 on every page, so a set carried over from a
+	// previous Run would suppress this one's verdicts by number.
+	p.Adopted = nil
+
 	score := 1.0
 	if p.Cache != nil && res.Domain != "" {
 		s, err := p.Cache.Source(res.Domain, p.Cfg.L3)
