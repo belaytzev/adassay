@@ -52,10 +52,14 @@ func OptedOut() bool {
 	return v != "" && v != "0" && v != "false"
 }
 
-func (o *Outbox) Record(res core.Result, adopted map[string]bool) {
+// Returns how many entries were queued, which is not the number of dropped
+// segments: adopted verdicts and domain-distrust promotions are withheld here,
+// so a caller counting its own result reports work that never left the machine.
+func (o *Outbox) Record(res core.Result, adopted map[string]bool) int {
 	if o == nil {
-		return
+		return 0
 	}
+	queued := 0
 	for _, seg := range res.Segments {
 		if seg.Verdict != core.Drop || adopted[seg.ID] {
 			continue
@@ -64,23 +68,28 @@ func (o *Outbox) Record(res core.Result, adopted map[string]bool) {
 		if slices.Contains(seg.Reasons, pipeline.ReasonDomain) {
 			continue
 		}
-		o.enqueue(core.SubmitEntry{
+		if o.enqueue(core.SubmitEntry{
 			Hash:    store.HexHash(seg.Text),
 			Verdict: core.Drop,
 			Reasons: seg.Reasons,
 			Source:  o.sourceOf(seg),
-		})
+		}) {
+			queued++
+		}
 	}
 	for _, f := range res.Hidden {
-		o.enqueue(core.SubmitEntry{
+		if o.enqueue(core.SubmitEntry{
 
 			Hash:    store.HexHash("hidden/" + f.Kind + "\n" + f.Sample),
 			Verdict: core.Drop,
 
 			Reasons: []string{"hidden_" + f.Kind},
 			Source:  o.sourceOf(core.Segment{}),
-		})
+		}) {
+			queued++
+		}
 	}
+	return queued
 }
 
 func (o *Outbox) Flush() {
@@ -98,22 +107,23 @@ func (o *Outbox) Flush() {
 	o.send(entries)
 }
 
-func (o *Outbox) FlushNow() {
+func (o *Outbox) FlushNow() error {
 	if o == nil {
-		return
+		return nil
 	}
 	for last := 0; ; {
 		entries, _, err := o.Spool.Pending()
 		if err != nil {
-			o.log().Warn("outbox: read failed", "err", err)
-			return
+			return fmt.Errorf("outbox: read failed: %w", err)
 		}
-		if len(entries) == 0 || !o.send(entries) {
-			return
+		if len(entries) == 0 {
+			return nil
+		}
+		if !o.send(entries) {
+			return fmt.Errorf("outbox: %d entries could not be delivered", len(entries))
 		}
 		if last > 0 && len(entries) >= last {
-			o.log().Warn("outbox: spool is not draining", "pending", len(entries))
-			return
+			return fmt.Errorf("outbox: spool is not draining, %d pending", len(entries))
 		}
 		last = len(entries)
 	}
@@ -188,10 +198,12 @@ func (c *Client) post(path string, id Identity, body any) error {
 	return nil
 }
 
-func (o *Outbox) enqueue(e core.SubmitEntry) {
+func (o *Outbox) enqueue(e core.SubmitEntry) bool {
 	if err := o.Spool.Enqueue(e); err != nil {
 		o.log().Warn("outbox: enqueue failed", "err", err)
+		return false
 	}
+	return true
 }
 
 func (o *Outbox) sourceOf(seg core.Segment) string {

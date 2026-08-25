@@ -301,11 +301,22 @@ func TestSeedSourceOverridesTheDetector(t *testing.T) {
 }
 
 func TestIdentityComesFromTheEnvironment(t *testing.T) {
+	configHome(t)
+	if err := (Identity{ClientID: "from-file", Secret: "file-secret"}).save(); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if id, ok := LoadIdentity(); !ok || id.ClientID != "from-file" {
+		t.Fatalf("LoadIdentity() = %+v, %v; want the file before the environment is set", id, ok)
+	}
+
 	t.Setenv(EnvInstall, "install-abc")
 	t.Setenv(EnvSecret, "secret-xyz")
 
 	id, ok := LoadIdentity()
 	if !ok || id.ClientID != "install-abc" || id.Secret != "secret-xyz" {
-		t.Fatalf("LoadIdentity() = %+v, %v", id, ok)
+		t.Fatalf("LoadIdentity() = %+v, %v: the environment has to win, or a credentials file left "+
+			"on a headless host makes it submit under the wrong install and every seed entry is "+
+			"refused with nothing the seeding side can see", id, ok)
 	}
 }

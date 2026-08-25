@@ -76,7 +76,7 @@ func openStore(dsn string) (*Store, error) {
 	st := &Store{db: db, d: d, quorum: defaultQuorum}
 
 	var hasRank int
-	if err := st.conn().QueryRow(d.hasSourceRank()).Scan(&hasRank); err != nil {
+	if err := st.conn().QueryRow(d.hasColumn("confirmations", "source_rank")).Scan(&hasRank); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("server: inspect confirmations: %w", err)
 	}

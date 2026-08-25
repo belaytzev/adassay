@@ -5,6 +5,10 @@
 # sites with little or no commercial insert, so the database gets negative
 # examples too and Keep stays the common verdict.
 
+# Checked 2026-08-26 — `adassay seed` warns when a feed yields nothing, which is
+# how laptopmag (silent since November 2025), reviewgeek (domain retired) and
+# rachelbythebay (refuses the crawler) came off this list.
+
 # Affiliate-heavy consumer tech
 https://www.techradar.com/feeds/articletype/news
 https://www.techradar.com/feeds/articletype/review
@@ -14,7 +18,6 @@ https://www.digitaltrends.com/feed/
 https://www.zdnet.com/news/rss.xml
 https://www.cnet.com/rss/news/
 https://www.pcworld.com/feed
-https://www.laptopmag.com/feeds/all
 https://www.androidauthority.com/feed/
 https://9to5mac.com/feed/
 https://9to5google.com/feed/
@@ -25,7 +28,6 @@ https://www.howtogeek.com/feed/
 https://lifehacker.com/feed/rss
 https://www.slashgear.com/feed/
 https://bgr.com/feed/
-https://www.reviewgeek.com/feed/
 
 # General tech press, mixed commercial pressure
 https://www.theverge.com/rss/index.xml
@@ -42,4 +44,3 @@ https://lwn.net/headlines/rss
 https://news.ycombinator.com/rss
 https://blog.golang.org/feed.atom
 https://www.phoronix.com/rss.php
-https://rachelbythebay.com/w/atom.xml

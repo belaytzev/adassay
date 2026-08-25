@@ -30,15 +30,36 @@ type feedItem struct {
 	Updated   string `xml:"updated"`
 }
 
+type atomLink struct {
+	Href string `xml:"href,attr"`
+	Rel  string `xml:"rel,attr"`
+}
+
+type atomEntry struct {
+	Links     []atomLink `xml:"link"`
+	Published string     `xml:"published"`
+	Updated   string     `xml:"updated"`
+}
+
+// An Atom entry carries several links — the article, its comment feed, its
+// comment page. Without rel the last one wins, which is usually the comments.
+func (e atomEntry) article() string {
+	for _, l := range e.Links {
+		if l.Rel == "alternate" {
+			return l.Href
+		}
+	}
+	for _, l := range e.Links {
+		if l.Rel == "" {
+			return l.Href
+		}
+	}
+	return ""
+}
+
 type feed struct {
-	Items   []feedItem `xml:"channel>item"`
-	Entries []struct {
-		Link struct {
-			Href string `xml:"href,attr"`
-		} `xml:"link"`
-		Published string `xml:"published"`
-		Updated   string `xml:"updated"`
-	} `xml:"entry"`
+	Items   []feedItem  `xml:"channel>item"`
+	Entries []atomEntry `xml:"entry"`
 }
 
 func seed(args []string, stdout io.Writer) error {
@@ -61,6 +82,9 @@ func seed(args []string, stdout io.Writer) error {
 	}
 	if *feeds == "" && *urls == "" {
 		return fmt.Errorf("adassay seed: give --feeds or --urls")
+	}
+	if *limit < 1 {
+		return fmt.Errorf("adassay seed: --limit must be at least 1, got %d", *limit)
 	}
 
 	cfg, err := config.Load(*cfgPath)
@@ -101,7 +125,7 @@ func seed(args []string, stdout io.Writer) error {
 	out.Source = core.SourceSeed
 	p := &pipeline.Pipeline{Cfg: cfg, Cache: st, Shared: client, Judge: judge.New(cfg.Judge)}
 
-	var visited, dropped, failed int
+	var visited, queued, failed int
 	for i, u := range targets {
 		if i > 0 {
 			time.Sleep(*pause)
@@ -119,14 +143,12 @@ func seed(args []string, stdout io.Writer) error {
 				n++
 			}
 		}
-		dropped += n + len(res.Hidden)
+		queued += out.Record(res, p.Adopted)
 		fmt.Fprintf(stdout, "  %s: %d segments, %d dropped, %d hidden\n", short(u), len(res.Segments), n, len(res.Hidden))
-		out.Record(res, p.Adopted)
 	}
 
-	fmt.Fprintf(stdout, "seed: %d visited, %d failed, %d verdicts queued\n", visited, failed, dropped)
-	out.FlushNow()
-	return nil
+	fmt.Fprintf(stdout, "seed: %d visited, %d failed, %d verdicts queued\n", visited, failed, queued)
+	return out.FlushNow()
 }
 
 func visit(pageURL string, cfg *config.Config, st *store.Store, p *pipeline.Pipeline) (core.Result, error) {
@@ -210,14 +232,24 @@ func feedLinks(feedURL string, cutoff time.Time) ([]string, error) {
 	}
 	for _, e := range f.Entries {
 		if fresh(cutoff, e.Published, e.Updated) {
-			out = append(out, e.Link.Href)
+			out = append(out, e.article())
 		}
+	}
+	if seen := len(f.Items) + len(f.Entries); seen > 0 && len(out) == 0 {
+		fmt.Fprintf(os.Stderr, "seed: %s: %d entries, none inside the window or none carrying a date\n",
+			short(feedURL), seen)
 	}
 	return out, nil
 }
 
+// An entry nobody can date is not evidence that it is fresh: taking it anyway
+// makes --since inert for the whole feed and pulls its backlog in.
 func fresh(cutoff time.Time, stamps ...string) bool {
-	layouts := []string{time.RFC1123Z, time.RFC1123, time.RFC3339, time.RFC822Z, time.RFC822}
+	layouts := []string{
+		time.RFC1123Z, time.RFC1123, time.RFC3339,
+		time.RFC822Z, time.RFC822, time.DateOnly,
+		"Mon, 2 Jan 2006 15:04:05 -0700", "Mon, 2 Jan 2006 15:04:05 MST",
+	}
 	for _, s := range stamps {
 		s = strings.TrimSpace(s)
 		if s == "" {
@@ -229,7 +261,7 @@ func fresh(cutoff time.Time, stamps ...string) bool {
 			}
 		}
 	}
-	return true
+	return false
 }
 
 func readLines(path string) ([]string, error) {

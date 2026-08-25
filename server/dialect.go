@@ -63,14 +63,6 @@ func (d dialect) hasColumn(table, column string) string {
 	return `SELECT COUNT(*) FROM pragma_table_info('` + table + `') WHERE name = '` + column + `'`
 }
 
-func (d dialect) hasSourceRank() string {
-	if d.name == "postgres" {
-		return `SELECT COUNT(*) FROM information_schema.columns
-		        WHERE table_name = 'confirmations' AND column_name = 'source_rank'`
-	}
-	return `SELECT COUNT(*) FROM pragma_table_info('confirmations') WHERE name = 'source_rank'`
-}
-
 type binder struct {
 	inner interface {
 		Exec(string, ...any) (sql.Result, error)

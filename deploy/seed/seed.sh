@@ -9,9 +9,10 @@
 #   ADASSAY_INSTALL=<install id>
 #   ADASSAY_SECRET=<install secret>
 #
-# The install must be marked as a seeder on the server, otherwise the submit
-# is refused. Register it once with `adassay share --register`, then flip the
-# flag in the database.
+# The install must be listed in ADASSAY_SEEDERS on the server, otherwise the
+# submit is refused. Register it once with the sibling register.sh, then add
+# the id it prints to that variable — the server reconciles the list at every
+# start, so a flag set by hand in the database is wiped on the next restart.
 set -eu
 
 ENV_FILE=${ADASSAY_SEED_ENV:-/etc/adassay/seed.env}
@@ -38,10 +39,15 @@ run() {
 		--pause "${ADASSAY_PAUSE:-8s}"
 }
 
-# One pass at a time: a run can outlive its cron slot, and two crawlers from one
-# IP is exactly the pattern publishers block. -E gives a busy lock its own code,
-# so a failing pass is not mistaken for a concurrent one and still exits nonzero
-# — cron and exit-status monitoring are the only thing watching this.
+# One pass at a time where flock exists — a run can outlive its cron slot, and
+# two crawlers from one IP is exactly the pattern publishers block. -E gives a
+# busy lock its own code, so a failing pass is not mistaken for a concurrent one
+# and still exits nonzero: cron and exit-status monitoring are the only thing
+# watching this. Without flock the pass runs unserialised and says so, rather
+# than looking locked while it is not.
+if [ -z "${ADASSAY_LOCKED:-}" ] && ! command -v flock >/dev/null 2>&1; then
+	echo "seed: flock not installed, running without a lock" >&2
+fi
 if [ -z "${ADASSAY_LOCKED:-}" ] && command -v flock >/dev/null 2>&1; then
 	ADASSAY_LOCKED=1
 	export ADASSAY_LOCKED
