@@ -69,14 +69,16 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 
 func newMux(a *Analyzer) *http.ServeMux {
 	mux := http.NewServeMux()
-	lim, c := newLimiter(), newCache()
+	lim, c, cases := newLimiter(), newCache(), newCases(a)
 	// "GET /{$}" and not "GET /": a catch-all would swallow a GET to
 	// /api/analyze and answer it with the page instead of 405.
 	mux.HandleFunc("GET /{$}", handleIndex)
 	mux.HandleFunc("POST /api/analyze", func(w http.ResponseWriter, r *http.Request) {
 		handleAnalyze(w, r, a, lim, c)
 	})
-	mux.HandleFunc("GET /api/case/{slug}", handleCase)
+	mux.HandleFunc("GET /api/case/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		handleCase(w, r, cases)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -87,10 +89,6 @@ func newMux(a *Analyzer) *http.ServeMux {
 func handleIndex(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprintln(w, "adassay")
-}
-
-func handleCase(w http.ResponseWriter, r *http.Request) {
-	http.NotFound(w, r)
 }
 
 func handleAnalyze(w http.ResponseWriter, r *http.Request, a *Analyzer, lim *limiter, c *cache) {
