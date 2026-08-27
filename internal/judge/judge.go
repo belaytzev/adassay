@@ -122,7 +122,16 @@ func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict,
 		return nil, err
 	}
 	url := strings.TrimSuffix(j.Cfg.Endpoint, "/") + "/v1/chat/completions"
-	resp, err := j.client().Post(url, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// A local runtime needs no key; a gateway refuses the request without one.
+	if j.Cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+j.Cfg.APIKey)
+	}
+	resp, err := j.client().Do(req)
 	if err != nil {
 		return nil, err
 	}

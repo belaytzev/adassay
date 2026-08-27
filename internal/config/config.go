@@ -87,7 +87,17 @@ type Judge struct {
 	Model     string        `yaml:"model"`
 	Timeout   time.Duration `yaml:"timeout"`
 	BatchSize int           `yaml:"batch_size"`
+
+	// Never from the file: rules.yaml is embedded in the binary and shipped,
+	// and a gateway key does not belong in either.
+	APIKey string `yaml:"-"`
 }
+
+const (
+	EnvJudgeURL   = "ADASSAY_JUDGE_URL"
+	EnvJudgeModel = "ADASSAY_JUDGE_MODEL"
+	EnvJudgeKey   = "ADASSAY_JUDGE_KEY"
+)
 
 func Load(path string) (*Config, error) {
 	cfg := &Config{}
@@ -104,6 +114,16 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("config: %s: %w", path, err)
 		}
 	}
+	// After the file, so a host can point the judge at a gateway without
+	// carrying its own copy of the rules.
+	if v := os.Getenv(EnvJudgeURL); v != "" {
+		cfg.Judge.Endpoint = v
+	}
+	if v := os.Getenv(EnvJudgeModel); v != "" {
+		cfg.Judge.Model = v
+	}
+	cfg.Judge.APIKey = os.Getenv(EnvJudgeKey)
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

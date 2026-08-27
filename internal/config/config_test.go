@@ -144,3 +144,30 @@ func TestEmptyOverrideFileKeepsDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestJudgeSettingsComeFromTheEnvironment(t *testing.T) {
+	base, err := Load("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if base.Judge.APIKey != "" {
+		t.Error("the embedded rules must not carry a key")
+	}
+
+	t.Setenv(EnvJudgeURL, "http://litellm.litellm:4000")
+	t.Setenv(EnvJudgeModel, "gpt-5.6-luna")
+	t.Setenv(EnvJudgeKey, "sk-adassay")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Judge.Endpoint != "http://litellm.litellm:4000" || cfg.Judge.Model != "gpt-5.6-luna" {
+		t.Errorf("endpoint/model = %q/%q, want the environment to override the embedded defaults",
+			cfg.Judge.Endpoint, cfg.Judge.Model)
+	}
+	if cfg.Judge.APIKey != "sk-adassay" {
+		t.Errorf("api key = %q: it can only come from the environment, since rules.yaml ships inside "+
+			"the binary", cfg.Judge.APIKey)
+	}
+}

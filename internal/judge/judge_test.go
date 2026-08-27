@@ -246,3 +246,36 @@ func TestFailedBatchStopsTheRound(t *testing.T) {
 		t.Errorf("requests = %d, want 1: the round ends at the first failure", calls)
 	}
 }
+
+func TestAPIKeyTravelsAsBearer(t *testing.T) {
+	cases := map[string]struct {
+		key  string
+		want string
+	}{
+		"gateway":       {key: "sk-abc123", want: "Bearer sk-abc123"},
+		"local runtime": {key: "", want: ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var got string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.Header.Get("Authorization")
+				fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"verdicts\":[]}"}}]}`)
+			}))
+			t.Cleanup(srv.Close)
+
+			j := New(config.Judge{
+				Endpoint: srv.URL, Model: "test", Timeout: 5 * time.Second, BatchSize: 8, APIKey: tc.key,
+			})
+			j.Log = slog.New(slog.DiscardHandler)
+			if _, err := j.ask("topic", segs("s1")); err != nil {
+				t.Fatalf("ask: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("Authorization = %q, want %q: a gateway refuses an unauthenticated request, "+
+					"and sending an empty bearer to a local runtime is not the same as sending nothing",
+					got, tc.want)
+			}
+		})
+	}
+}

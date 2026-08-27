@@ -181,6 +181,12 @@ they are an open question, and sending one would give away the page while adding
 Sending happens in batches off disk — not sooner than six hours, not fewer than twenty
 records — so the stream is not a broadcast of your reading session.
 
+**The judge.** L3 arbitration goes to any OpenAI-compatible endpoint. `ADASSAY_JUDGE_URL` and
+`ADASSAY_JUDGE_MODEL` override the built-in defaults, and `ADASSAY_JUDGE_KEY` supplies a bearer
+token for gateways that want one — it is never read from `rules.yaml`, which is embedded in the
+binary. A judge that cannot be reached is a warning, not a failure: the grey zone is left as the
+rules decided it.
+
 **Credentials.** An install keeps its id and secret in the user config directory. Headless
 hosts can supply them through `ADASSAY_INSTALL` and `ADASSAY_SECRET` instead, which takes
 precedence over the file and avoids registering a new install on every container start.
