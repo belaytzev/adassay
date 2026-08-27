@@ -32,6 +32,15 @@ var browserHeaders = map[string]string{
 }
 
 func Get(pageURL string) ([]byte, error) {
+	return get(client, pageURL)
+}
+
+// GetPublic is Get for the hosted demo, where localhost is somebody else's machine.
+func GetPublic(pageURL string) ([]byte, error) {
+	return get(publicClient, pageURL)
+}
+
+func get(client *http.Client, pageURL string) ([]byte, error) {
 	u, err := url.Parse(pageURL)
 	if err != nil {
 		return nil, fmt.Errorf("adassay: %w", err)
@@ -78,20 +87,40 @@ func blocked(resp *http.Response) bool {
 
 var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
-var client = &http.Client{
-	Timeout: Timeout,
-	Transport: &http.Transport{DialContext: (&net.Dialer{
-		Timeout: Timeout,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			addr, err := netip.ParseAddrPort(address)
-			if err != nil {
-				return err
-			}
-			if ip := addr.Addr().Unmap(); ip.IsPrivate() || cgnat.Contains(ip) ||
-				ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-				return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip)
-			}
-			return nil
-		},
-	}).DialContext},
+func refuse(ip netip.Addr) error {
+	if ip = ip.Unmap(); ip.IsPrivate() || cgnat.Contains(ip) ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip)
+	}
+	return nil
 }
+
+func refusePublic(ip netip.Addr) error {
+	if ip.Unmap().IsLoopback() {
+		return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip.Unmap())
+	}
+	return refuse(ip)
+}
+
+// The hook runs after DNS resolution and on every redirect hop, so a name that
+// resolves inward is refused just as a literal address is.
+func newClient(refuse func(netip.Addr) error) *http.Client {
+	return &http.Client{
+		Timeout: Timeout,
+		Transport: &http.Transport{DialContext: (&net.Dialer{
+			Timeout: Timeout,
+			Control: func(_, address string, _ syscall.RawConn) error {
+				addr, err := netip.ParseAddrPort(address)
+				if err != nil {
+					return err
+				}
+				return refuse(addr.Addr())
+			},
+		}).DialContext},
+	}
+}
+
+var (
+	client       = newClient(refuse)
+	publicClient = newClient(refusePublic)
+)

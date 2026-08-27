@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -107,5 +108,52 @@ func TestEmptyPageIsNotABlock(t *testing.T) {
 	}
 	if len(page) != 0 {
 		t.Errorf("page = %q, want empty", page)
+	}
+}
+
+func TestRefusePredicates(t *testing.T) {
+	cases := []struct {
+		addr       string
+		refused    bool
+		pubRefused bool
+	}{
+		{"127.0.0.1", false, true},
+		{"127.1.2.3", false, true},
+		{"::1", false, true},
+		{"192.168.1.5", true, true},
+		{"10.0.0.1", true, true},
+		{"169.254.169.254", true, true},
+		{"100.64.0.1", true, true},
+		{"0.0.0.0", true, true},
+		{"93.184.216.34", false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.addr, func(t *testing.T) {
+			ip := netip.MustParseAddr(c.addr)
+			if got := refuse(ip) != nil; got != c.refused {
+				t.Errorf("refuse(%s) refused = %v, want %v", c.addr, got, c.refused)
+			}
+			if got := refusePublic(ip) != nil; got != c.pubRefused {
+				t.Errorf("refusePublic(%s) refused = %v, want %v", c.addr, got, c.pubRefused)
+			}
+		})
+	}
+}
+
+func TestGetPublicRefusesLoopbackThatGetStillFetches(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html></html>"))
+	}))
+	defer srv.Close()
+
+	if _, err := Get(srv.URL); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	_, err := GetPublic(srv.URL)
+	if err == nil {
+		t.Fatal("GetPublic fetched a loopback address")
+	}
+	if !strings.Contains(err.Error(), "private address") {
+		t.Errorf("err = %v, want the dialer refusal", err)
 	}
 }
