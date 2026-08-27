@@ -19,14 +19,19 @@ import (
 	"adassay.com/internal/render"
 )
 
-//go:embed site/index.html site/adassay.css site/adassay.js
+//go:embed site/index.html site/adassay.css site/adassay.js site/fonts
 var siteFS embed.FS
 
 var siteRoot, _ = fs.Sub(siteFS, "site")
 
 // assets are listed rather than served under a catch-all: "GET /" would match
 // a GET to /api/analyze too, answering 404 where the mux owes a 405.
-var assets = []string{"adassay.css", "adassay.js"}
+var assets = []string{
+	"adassay.css",
+	"adassay.js",
+	"fonts/source-serif-4-latin-cyrillic.woff2",
+	"fonts/jetbrains-mono-latin-cyrillic.woff2",
+}
 
 // maxRequestBody is generous for a JSON object holding one URL.
 const maxRequestBody = 4 << 10

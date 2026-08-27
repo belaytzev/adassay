@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -358,5 +359,44 @@ func TestFrontendNeverAssignsInnerHTML(t *testing.T) {
 		if strings.Contains(string(js), banned) {
 			t.Errorf("adassay.js uses %s on attacker-influenced text", banned)
 		}
+	}
+}
+
+// A shop window for a privacy tool must not phone out on load: no Google Fonts,
+// no CDN, nothing but the binary's own assets.
+func TestStylesheetRequestsNothingExternal(t *testing.T) {
+	css, err := siteFS.ReadFile("site/adassay.css")
+	if err != nil {
+		t.Fatalf("read adassay.css: %v", err)
+	}
+
+	mux := testMux(t, func(string) ([]byte, error) { return corpus(t, "promo_listicle.html"), nil })
+	urls := regexp.MustCompile(`url\(\s*['"]?([^'")]+)`).FindAllStringSubmatch(string(css), -1)
+	if len(urls) == 0 {
+		t.Fatal("no url() found in the stylesheet")
+	}
+
+	var fonts int
+	for _, m := range urls {
+		ref := m[1]
+		if strings.HasPrefix(ref, "data:") {
+			continue
+		}
+		if strings.Contains(ref, "://") || strings.HasPrefix(ref, "//") {
+			t.Errorf("stylesheet reaches off-origin: %q", ref)
+			continue
+		}
+		fonts++
+		if _, err := siteFS.ReadFile("site/" + ref); err != nil {
+			t.Errorf("%q is not embedded: %v", ref, err)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", "/"+ref, nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("GET /%s = %d, want 200", ref, w.Code)
+		}
+	}
+	if fonts != 2 {
+		t.Errorf("served %d local assets from the stylesheet, want 2 fonts", fonts)
 	}
 }
