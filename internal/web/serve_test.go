@@ -8,7 +8,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"golang.org/x/time/rate"
+
+	"adassay.com/internal/core"
 	"adassay.com/internal/fetch"
 	"adassay.com/internal/render"
 )
@@ -168,5 +172,145 @@ func TestUnknownPathIsNotFound(t *testing.T) {
 		if w.Code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", path, w.Code)
 		}
+	}
+}
+
+func TestAnalyzeRouteRefusesABurstFromOneAddress(t *testing.T) {
+	// A distinct URL each time, so the cache cannot hide a refusal.
+	mux := testMux(t, func(string) ([]byte, error) { return corpus(t, "promo_listicle.html"), nil })
+	for i := 0; i < analyzeBurst; i++ {
+		w, _ := post(t, mux, fmt.Sprintf(`{"url":"https://example.com/p%d"}`, i))
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d = %d, want 200", i, w.Code)
+		}
+	}
+
+	w, res := post(t, mux, `{"url":"https://example.com/over"}`)
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", w.Code)
+	}
+	if res.Error != "rate_limited" {
+		t.Errorf("error = %q, want %q", res.Error, "rate_limited")
+	}
+	if w.Header().Get("Retry-After") == "" {
+		t.Error("no Retry-After on a refusal")
+	}
+}
+
+// The limit is checked before the body, so a refused caller cannot spend the
+// analyzer on a malformed request either.
+func TestLimiterRunsBeforeTheAnalyzer(t *testing.T) {
+	calls := 0
+	mux := testMux(t, func(string) ([]byte, error) {
+		calls++
+		return corpus(t, "promo_listicle.html"), nil
+	})
+	for i := 0; i < analyzeBurst+3; i++ {
+		post(t, mux, fmt.Sprintf(`{"url":"https://example.com/p%d"}`, i))
+	}
+	if calls != analyzeBurst {
+		t.Errorf("fetched %d times, want %d", calls, analyzeBurst)
+	}
+}
+
+func TestLimiterRefusesNewAddressesWhenTableIsFull(t *testing.T) {
+	l := newLimiter()
+	for i := 0; i < maxTrackedIPs; i++ {
+		ip := fmt.Sprintf("10.%d.%d.%d", i>>16&0xff, i>>8&0xff, i&0xff)
+		if !l.allow(ip) {
+			t.Fatalf("filling the table: %s refused", ip)
+		}
+	}
+	if l.allow("203.0.113.7") {
+		t.Error("a new address was admitted to a full table")
+	}
+	// The addresses already being tracked keep their remaining budget.
+	if !l.allow("10.0.0.0") {
+		t.Error("a tracked address lost its budget to the flood")
+	}
+}
+
+// A drained bucket is worth remembering; a full one is not, and dropping it
+// makes room without forgiving anyone.
+func TestLimiterPrunesFullBuckets(t *testing.T) {
+	l := newLimiter()
+	l.seen["198.51.100.1"] = rate.NewLimiter(analyzeRate, analyzeBurst)
+	l.prune()
+	if len(l.seen) != 0 {
+		t.Errorf("kept %d full bucket(s)", len(l.seen))
+	}
+}
+
+func TestClientIPGroupsIPv6ByPrefix(t *testing.T) {
+	req := func(remote string) string {
+		r := httptest.NewRequest("POST", "/api/analyze", nil)
+		r.RemoteAddr = remote
+		return clientIP(r)
+	}
+	if a, b := req("[2001:db8::1]:443"), req("[2001:db8::dead:beef]:443"); a != b {
+		t.Errorf("same /64 keyed apart: %q vs %q", a, b)
+	}
+	if a, b := req("[2001:db8:1::1]:443"), req("[2001:db8::1]:443"); a == b {
+		t.Errorf("different /64 keyed together: %q", a)
+	}
+	if got := req("192.0.2.9:1234"); got != "192.0.2.9" {
+		t.Errorf("clientIP = %q, want %q", got, "192.0.2.9")
+	}
+}
+
+func TestRepeatedURLIsServedFromCache(t *testing.T) {
+	calls := 0
+	mux := testMux(t, func(string) ([]byte, error) {
+		calls++
+		return corpus(t, "promo_listicle.html"), nil
+	})
+
+	first, want := post(t, mux, `{"url":"https://example.com/best-keyboards"}`)
+	second, got := post(t, mux, `{"url":"https://example.com/best-keyboards"}`)
+
+	if calls != 1 {
+		t.Errorf("fetched %d times, want 1", calls)
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Error("the cached response differs from the first one")
+	}
+	if len(got.Segments) != len(want.Segments) {
+		t.Errorf("segments = %d, want %d", len(got.Segments), len(want.Segments))
+	}
+}
+
+// A block is a property of the moment, not of the page: caching it would keep
+// answering with a stale failure long after the page came back.
+func TestFailuresAreNotCached(t *testing.T) {
+	calls := 0
+	mux := testMux(t, func(string) ([]byte, error) {
+		calls++
+		return nil, fmt.Errorf("adassay: fetch: 403: %w", fetch.ErrBlocked)
+	})
+	post(t, mux, `{"url":"https://example.com/paywalled"}`)
+	post(t, mux, `{"url":"https://example.com/paywalled"}`)
+	if calls != 2 {
+		t.Errorf("fetched %d times, want 2", calls)
+	}
+}
+
+func TestCacheStopsGrowingWhenFull(t *testing.T) {
+	c := newCache()
+	for i := 0; i < maxCached+10; i++ {
+		c.put(fmt.Sprintf("https://example.com/%d", i), core.Result{}, "")
+	}
+	if len(c.entries) > maxCached {
+		t.Errorf("cache holds %d entries, want at most %d", len(c.entries), maxCached)
+	}
+	if _, _, ok := c.get("https://example.com/0"); !ok {
+		t.Error("an early entry was evicted by later ones")
+	}
+}
+
+func TestCacheForgetsStaleEntries(t *testing.T) {
+	c := newCache()
+	c.entries["https://example.com/old"] = entry{at: time.Now().Add(-cacheTTL - time.Second)}
+	if _, _, ok := c.get("https://example.com/old"); ok {
+		t.Error("served an entry past its ttl")
 	}
 }
