@@ -299,6 +299,26 @@ The best configuration is chosen by rule, not by a blended score: reject anythin
 `drop_prec` below 1.000, reject anything flagging more than 15% of a page, then take the
 widest coverage, then the least noise.
 
+## The demo page
+
+A proof sheet: paste a URL, or open one of the two saved cases, and see which paragraphs were
+cut, which were queried, and which were left alone, with the reasons in the margin. A toggle
+switches between the page as a reader sees it and the markdown an agent actually receives.
+
+```sh
+go run ./cmd/adassay-web        # then open http://localhost:8080
+```
+
+Settings: `--addr` (default `:8080`) and `--config` for a rules override. The page, its
+stylesheet, its fonts and the two case fixtures are embedded in the binary — no build step, no
+node_modules, and no external request on load.
+
+It runs `fetch → extract → pipeline` with the cache, the shared database and the judge all
+switched off, so it opens no database file and sends nothing anywhere: L1 and L2 only. Fetching
+goes through `fetch.GetPublic`, which refuses loopback on top of the usual private ranges, so a
+hosted instance cannot be pointed at its own network. `/api/analyze` is rate limited per address
+and caches recent URLs.
+
 ## Running the shared database
 
 ```sh
