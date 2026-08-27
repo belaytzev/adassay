@@ -1,8 +1,10 @@
 package web
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/netip"
@@ -16,6 +18,15 @@ import (
 	"adassay.com/internal/core"
 	"adassay.com/internal/render"
 )
+
+//go:embed site/index.html site/adassay.css site/adassay.js
+var siteFS embed.FS
+
+var siteRoot, _ = fs.Sub(siteFS, "site")
+
+// assets are listed rather than served under a catch-all: "GET /" would match
+// a GET to /api/analyze too, answering 404 where the mux owes a 405.
+var assets = []string{"adassay.css", "adassay.js"}
 
 // maxRequestBody is generous for a JSON object holding one URL.
 const maxRequestBody = 4 << 10
@@ -70,9 +81,11 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 func newMux(a *Analyzer) *http.ServeMux {
 	mux := http.NewServeMux()
 	lim, c, cases := newLimiter(), newCache(), newCases(a)
-	// "GET /{$}" and not "GET /": a catch-all would swallow a GET to
-	// /api/analyze and answer it with the page instead of 405.
-	mux.HandleFunc("GET /{$}", handleIndex)
+	static := http.FileServerFS(siteRoot)
+	mux.Handle("GET /{$}", static)
+	for _, name := range assets {
+		mux.Handle("GET /"+name, static)
+	}
 	mux.HandleFunc("POST /api/analyze", func(w http.ResponseWriter, r *http.Request) {
 		handleAnalyze(w, r, a, lim, c)
 	})
@@ -83,12 +96,6 @@ func newMux(a *Analyzer) *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 	})
 	return mux
-}
-
-// ponytail: placeholder page, replaced by the embedded site in task 6
-func handleIndex(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintln(w, "adassay")
 }
 
 func handleAnalyze(w http.ResponseWriter, r *http.Request, a *Analyzer, lim *limiter, c *cache) {

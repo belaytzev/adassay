@@ -314,3 +314,49 @@ func TestCacheForgetsStaleEntries(t *testing.T) {
 		t.Error("served an entry past its ttl")
 	}
 }
+
+// The meta tags are how `go get adassay.com/...` finds the repository. Losing
+// them breaks the import path, quietly.
+func TestIndexServesThePageWithGoMetaTags(t *testing.T) {
+	mux := testMux(t, func(string) ([]byte, error) { return corpus(t, "promo_listicle.html"), nil })
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		`<meta name="go-import" content="adassay.com git https://git.t1go.net/belaytzev/adassay.git">`,
+		`<meta name="go-source" content="adassay.com https://git.t1go.net/belaytzev/adassay `,
+		`<link rel="stylesheet" href="/adassay.css">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("index does not contain %q", want)
+		}
+	}
+
+	for _, asset := range []string{"/adassay.css", "/adassay.js"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", asset, nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", asset, w.Code)
+		}
+	}
+}
+
+// The page shows attacker-influenced text, so nothing from the API may reach
+// innerHTML: render.Safe defuses adassay markers but does not escape HTML.
+func TestFrontendNeverAssignsInnerHTML(t *testing.T) {
+	js, err := siteFS.ReadFile("site/adassay.js")
+	if err != nil {
+		t.Fatalf("read adassay.js: %v", err)
+	}
+	for _, banned := range []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"} {
+		if strings.Contains(string(js), banned) {
+			t.Errorf("adassay.js uses %s on attacker-influenced text", banned)
+		}
+	}
+}
