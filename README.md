@@ -325,11 +325,27 @@ shares one bucket: put the limit in front of it if you host it publicly. Four an
 once at most, and the fifth is answered with 503 rather than queued — parsing holds memory, and
 a per-address limit does not bound how many addresses there are.
 
+To host it:
+
+```sh
+docker build -f Dockerfile.web -t adassay-web .
+kubectl apply -f deploy/k8s/web-deployment.yaml -f deploy/k8s/web-service.yaml -f deploy/k8s/web-ingress.yaml
+```
+
+It is a separate image from the server's on purpose. The demo changes often — page copy, styles,
+cases — while the server holds the verdict database and should be redeployed rarely and
+deliberately. A single image would tie the two together, so a change of wording would move the
+database. Both binaries link sqlite either way, since the pipeline depends on the record type, so
+splitting them saves about a megabyte and that is not the reason for it.
+
+Run one replica. The rate limiter and the result cache both live in the process, so a second pod
+doubles the allowance and halves the cache hit rate.
+
 ## Running the shared database
 
 ```sh
 docker build -t adassay-server .
-kubectl apply -f deploy/k8s/
+kubectl apply -f deploy/k8s/deployment.yaml -f deploy/k8s/service.yaml -f deploy/k8s/ingress.yaml -f deploy/k8s/pvc.yaml
 ```
 
 The server lives in `server/` as a package with `cmd/adassay-server` as a thin main, so it can
