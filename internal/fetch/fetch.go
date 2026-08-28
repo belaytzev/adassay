@@ -32,6 +32,15 @@ var browserHeaders = map[string]string{
 }
 
 func Get(pageURL string) ([]byte, error) {
+	return get(client, pageURL)
+}
+
+// GetPublic is Get for the hosted demo, where localhost is somebody else's machine.
+func GetPublic(pageURL string) ([]byte, error) {
+	return get(publicClient, pageURL)
+}
+
+func get(client *http.Client, pageURL string) ([]byte, error) {
 	u, err := url.Parse(pageURL)
 	if err != nil {
 		return nil, fmt.Errorf("adassay: %w", err)
@@ -78,20 +87,52 @@ func blocked(resp *http.Response) bool {
 
 var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
-var client = &http.Client{
-	Timeout: Timeout,
-	Transport: &http.Transport{DialContext: (&net.Dialer{
-		Timeout: Timeout,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			addr, err := netip.ParseAddrPort(address)
-			if err != nil {
-				return err
-			}
-			if ip := addr.Addr().Unmap(); ip.IsPrivate() || cgnat.Contains(ip) ||
-				ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-				return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip)
-			}
-			return nil
-		},
-	}).DialContext},
+func refuse(target netip.AddrPort) error {
+	if ip := target.Addr().Unmap(); ip.IsPrivate() || cgnat.Contains(ip) ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip)
+	}
+	return nil
 }
+
+func refusePublic(target netip.AddrPort) error {
+	if ip := target.Addr().Unmap(); ip.IsLoopback() {
+		return fmt.Errorf("adassay: refusing to fetch a private address (%s)", ip)
+	}
+	if err := refuse(target); err != nil {
+		return err
+	}
+	// The port is checked here rather than on the submitted URL because a
+	// redirect picks its own: a hosted demo that dials any port is a port
+	// scanner wearing its address.
+	if p := target.Port(); p != 80 && p != 443 {
+		return fmt.Errorf("adassay: refusing to fetch port %d", p)
+	}
+	return nil
+}
+
+// The hook runs after DNS resolution and on every redirect hop, so a name that
+// resolves inward is refused just as a literal address is.
+func newClient(refuse func(netip.AddrPort) error) *http.Client {
+	return &http.Client{
+		Timeout: Timeout,
+		Transport: &http.Transport{
+			IdleConnTimeout: 90 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout: Timeout,
+				Control: func(_, address string, _ syscall.RawConn) error {
+					addr, err := netip.ParseAddrPort(address)
+					if err != nil {
+						return err
+					}
+					return refuse(addr)
+				},
+			}).DialContext,
+		},
+	}
+}
+
+var (
+	client       = newClient(refuse)
+	publicClient = newClient(refusePublic)
+)

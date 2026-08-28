@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="go-import" content="adassay.com git https://git.t1go.net/belaytzev/adassay.git">
+<meta name="go-source" content="adassay.com https://git.t1go.net/belaytzev/adassay https://git.t1go.net/belaytzev/adassay/src/branch/main{/dir} https://git.t1go.net/belaytzev/adassay/src/branch/main{/dir}/{file}#L{line}">
+<title>adassay — an ad blocker for AI agents</title>
+<link rel="stylesheet" href="/adassay.css">
+<script src="/adassay.js" defer></script>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="wordmark">adassay</div>
+    <code>go install adassay.com/cmd/adassay@latest</code>
+  </header>
+
+  <section class="hero">
+    <h1>An ad blocker for AI agents.</h1>
+    <p>Web pages carry text written to be quoted by machines: affiliate inserts, paid
+       placements dressed as editorial, instructions hidden where only a parser will find
+       them. adassay cuts what the publisher declared, marks what is doubtful, and reports
+       what the page hides from readers.</p>
+
+    <form class="field" id="form">
+      <input type="url" id="url" placeholder="https://example.com/best-laptops-2026" aria-label="Page to read" required>
+      <button class="btn" type="submit" id="submit">Read it</button>
+    </form>
+
+    <div class="chips">
+      <span>or open a saved one:</span>
+      <button class="chip" type="button" data-case="keyboards" aria-pressed="true">keyboard roundup</button>
+      <button class="chip" type="button" data-case="injection" aria-pressed="false">hidden instruction</button>
+    </div>
+  </section>
+
+  <div class="strip" id="strip" hidden>
+    <div class="tally" id="tally"></div>
+    <div class="switch">
+      <button type="button" data-view="human" aria-pressed="true">as a reader sees it</button>
+      <button type="button" data-view="agent" aria-pressed="false">as your agent reads it</button>
+    </div>
+  </div>
+
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <div id="finding"></div>
+
+  <section class="sheet">
+    <h2 class="doctitle" id="doctitle"></h2>
+    <div id="body"></div>
+    <p class="note" id="note"></p>
+  </section>
+
+  <footer class="colophon">
+    <p>It removes advertising the publisher itself declared, and it has never removed an
+       honest paragraph — the one number the project refuses to trade away. It does not
+       reliably catch native advertising that carries no link, no price and no disclosure.
+       That class is an open problem, not a solved one.</p>
+    <p>Nothing you paste here is written to disk: this page opens no database and tells the
+       shared server nothing. A result is held in memory for a few minutes, so the same URL
+       is not fetched twice, and that is all.</p>
+    <p>Source: <a href="https://git.t1go.net/belaytzev/adassay">git.t1go.net/belaytzev/adassay</a></p>
+  </footer>
+
+</div>
+
+</body>
+</html>

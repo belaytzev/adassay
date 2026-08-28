@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -107,5 +108,79 @@ func TestEmptyPageIsNotABlock(t *testing.T) {
 	}
 	if len(page) != 0 {
 		t.Errorf("page = %q, want empty", page)
+	}
+}
+
+func TestRefusePredicates(t *testing.T) {
+	cases := []struct {
+		addr       string
+		refused    bool
+		pubRefused bool
+	}{
+		{"127.0.0.1", false, true},
+		{"127.1.2.3", false, true},
+		{"::1", false, true},
+		{"192.168.1.5", true, true},
+		{"10.0.0.1", true, true},
+		{"169.254.169.254", true, true},
+		{"100.64.0.1", true, true},
+		{"0.0.0.0", true, true},
+		{"fd00::1", true, true},
+		{"fe80::1", true, true},
+		// 4-in-6 is what a dual-stack resolver hands the dialer.
+		{"::ffff:127.0.0.1", false, true},
+		{"::ffff:192.168.1.5", true, true},
+		{"::ffff:100.64.0.1", true, true},
+		{"::ffff:169.254.169.254", true, true},
+		{"93.184.216.34", false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.addr, func(t *testing.T) {
+			target := netip.AddrPortFrom(netip.MustParseAddr(c.addr), 80)
+			if got := refuse(target) != nil; got != c.refused {
+				t.Errorf("refuse(%s) refused = %v, want %v", c.addr, got, c.refused)
+			}
+			if got := refusePublic(target) != nil; got != c.pubRefused {
+				t.Errorf("refusePublic(%s) refused = %v, want %v", c.addr, got, c.pubRefused)
+			}
+		})
+	}
+}
+
+func TestGetPublicRefusesLoopbackThatGetStillFetches(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html></html>"))
+	}))
+	defer srv.Close()
+
+	if _, err := Get(srv.URL); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	_, err := GetPublic(srv.URL)
+	if err == nil {
+		t.Fatal("GetPublic fetched a loopback address")
+	}
+	if !strings.Contains(err.Error(), "private address") {
+		t.Errorf("err = %v, want the dialer refusal", err)
+	}
+}
+
+// A redirect chooses its own port, so the guard every hop passes through has to
+// be the one that refuses it: checking the submitted URL only covers hop one.
+func TestPublicGuardRefusesNonDefaultPorts(t *testing.T) {
+	public := netip.MustParseAddr("93.184.216.34")
+	for _, port := range []uint16{22, 25, 6379, 8080, 11211} {
+		if err := refusePublic(netip.AddrPortFrom(public, port)); err == nil {
+			t.Errorf("refusePublic dialled port %d", port)
+		}
+	}
+	for _, port := range []uint16{80, 443} {
+		if err := refusePublic(netip.AddrPortFrom(public, port)); err != nil {
+			t.Errorf("refusePublic(port %d) = %v, want no refusal", port, err)
+		}
+	}
+	// The CLI talks to whatever a developer runs locally, so it keeps every port.
+	if err := refuse(netip.AddrPortFrom(public, 8080)); err != nil {
+		t.Errorf("refuse(port 8080) = %v, want no refusal", err)
 	}
 }
