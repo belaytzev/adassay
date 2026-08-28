@@ -117,7 +117,7 @@ func rawScan(root *html.Node) (map[string][]core.Link, []block, int) {
 func splice(segs []core.Segment, blocks []block) []core.Segment {
 	at := map[string]int{}
 	for i, s := range segs {
-		for _, line := range strings.Split(s.Text, "\n\n") {
+		for line := range strings.SplitSeq(s.Text, "\n\n") {
 			if _, ok := at[line]; !ok {
 				at[line] = i
 			}
@@ -170,7 +170,10 @@ func index(idx map[string][]core.Link, key string, links []core.Link) {
 
 func dedupeLinks(links []core.Link) []core.Link {
 	seen := make(map[core.Link]bool, len(links))
-	out := make([]core.Link, 0, len(links))
+	// Grown, not preallocated: a block of a hundred thousand identical links
+	// dedupes to one element that would otherwise hold the whole backing array
+	// alive, invisible to anything measuring the result by length.
+	var out []core.Link
 	for _, l := range links {
 		if seen[l] {
 			continue

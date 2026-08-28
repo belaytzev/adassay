@@ -109,6 +109,24 @@ func TestAnalyze(t *testing.T) {
 			wantCode: "invalid",
 		},
 		{
+			name:     "no host",
+			url:      "http:///etc/passwd",
+			fetch:    func(string) ([]byte, error) { t.Error("fetched a hostless url"); return nil, nil },
+			wantCode: "invalid",
+		},
+		{
+			name:     "a port with no host in front of it",
+			url:      "http://:80/",
+			fetch:    func(string) ([]byte, error) { t.Error("fetched a hostless url"); return nil, nil },
+			wantCode: "invalid",
+		},
+		{
+			name:     "non-default port",
+			url:      "http://example.com:22/",
+			fetch:    func(string) ([]byte, error) { t.Error("dialled a non-default port"); return nil, nil },
+			wantCode: "invalid",
+		},
+		{
 			name:     "transport error",
 			url:      "https://example.com/gone",
 			fetch:    func(string) ([]byte, error) { return nil, errors.New("adassay: fetch: no such host") },
@@ -156,5 +174,23 @@ func TestAnalyzeOpensNoDatabase(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("the demo wrote %v, it must open no database", entries)
+	}
+}
+
+// Serve builds an Analyzer with no Fetch, so the hosted demo's whole SSRF
+// defence rests on this fallback being GetPublic rather than Get. The refusal
+// comes from the dialer's Control hook, before a connection is attempted, so
+// nothing needs to be listening for this to be decisive.
+func TestAnalyzeWithoutAFetchRefusesLoopback(t *testing.T) {
+	a := &Analyzer{Cfg: testConfig(t)}
+	_, err := a.Analyze("http://127.0.0.1/")
+	if err == nil {
+		t.Fatal("the demo fetched a loopback address")
+	}
+	if got := Code(err); got != "failed" {
+		t.Errorf("code = %q, want %q", got, "failed")
+	}
+	if !strings.Contains(err.Error(), "private address") {
+		t.Errorf("err = %v, want the dialer refusal", err)
 	}
 }

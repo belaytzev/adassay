@@ -316,8 +316,14 @@ node_modules, and no external request on load.
 It runs `fetch → extract → pipeline` with the cache, the shared database and the judge all
 switched off, so it opens no database file and sends nothing anywhere: L1 and L2 only. Fetching
 goes through `fetch.GetPublic`, which refuses loopback on top of the usual private ranges, so a
-hosted instance cannot be pointed at its own network. `/api/analyze` is rate limited per address
-and caches recent URLs.
+hosted instance cannot be pointed at its own network, and only the default http and https ports
+are dialled, on every redirect hop and not just on the address you type. `/api/analyze` is rate
+limited at one request a second, burst five, keyed on the address it arrives from — on the whole
+/64 for IPv6, since one client routinely holds one — and holds recent results in memory for five
+minutes. No forwarded-IP header is believed, so behind a tunnel or a reverse proxy every visitor
+shares one bucket: put the limit in front of it if you host it publicly. Four analyses run at
+once at most, and the fifth is answered with 503 rather than queued — parsing holds memory, and
+a per-address limit does not bound how many addresses there are.
 
 ## Running the shared database
 
@@ -418,7 +424,7 @@ Three licences, for three different kinds of thing.
 
 | What | Licence | Why |
 |---|---|---|
-| Client, CLI, MCP server, shared libraries | [MIT](LICENSE) | should spread without friction; every install feeds the database |
+| Client, CLI, MCP server, demo web UI, shared libraries | [MIT](LICENSE) | should spread without friction; every install feeds the database |
 | `server/` and `cmd/adassay-server/` | [AGPL-3.0](server/LICENSE) | a closed fork of the service would take contributed verdicts and give nothing back |
 | The verdict database dump | [ODbL](LICENSE-DATA) | the one asset that cannot be rewritten; improvements should return to the commons |
 
@@ -428,4 +434,8 @@ modifications is required only when you offer the service to others over a netwo
 [server/README.md](server/README.md).
 
 Test fixtures copied from third-party sites are under none of these and remain their
-publishers'.
+publishers'. The demo's fonts are third-party too: Source Serif 4 and JetBrains Mono, subset to
+latin and cyrillic, under the [SIL Open Font License 1.1](internal/web/site/fonts/LICENSE) —
+`adassay-web` embeds that licence text and serves it beside the fonts it covers. A subset is a
+Modified Version, so the Source Serif subset ships renamed to "Adassay Serif": the OFL reserves
+the name 'Source' for Adobe's own builds.

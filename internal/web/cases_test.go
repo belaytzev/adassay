@@ -9,7 +9,7 @@ import (
 	"adassay.com/internal/core"
 )
 
-func getCase(t *testing.T, mux *http.ServeMux, slug string) (*httptest.ResponseRecorder, response) {
+func getCase(t *testing.T, mux http.Handler, slug string) (*httptest.ResponseRecorder, response) {
 	t.Helper()
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/case/"+slug, nil))
@@ -37,6 +37,9 @@ func TestCases(t *testing.T) {
 	}{
 		{slug: "keyboards", keep: 3, flag: 2, drop: 1},
 		{slug: "injection", keep: 4, hidden: 1},
+	}
+	if len(cases) != len(caseURLs) {
+		t.Fatalf("the table covers %d cases, want all %d", len(cases), len(caseURLs))
 	}
 	for _, tc := range cases {
 		t.Run(tc.slug, func(t *testing.T) {

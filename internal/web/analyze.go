@@ -37,8 +37,14 @@ func Code(err error) string {
 
 func (a *Analyzer) Analyze(pageURL string) (core.Result, error) {
 	u, err := url.Parse(pageURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	// Hostname rather than Host: "http://:80/" parses with a Host of ":80" and
+	// would reach the transport, which answers with a failure, not an address.
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return core.Result{}, &Error{Code: "invalid", Err: fmt.Errorf("adassay: %q is not an http or https url", pageURL)}
+	}
+	// A hosted demo that dials any port is a port scanner wearing its address.
+	if p := u.Port(); p != "" && p != "80" && p != "443" {
+		return core.Result{}, &Error{Code: "invalid", Err: fmt.Errorf("adassay: %q: only the default http and https ports are fetched", pageURL)}
 	}
 
 	get := a.Fetch

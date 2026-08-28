@@ -392,3 +392,17 @@ func TestExtractRecoversAffiliateButtons(t *testing.T) {
 		t.Fatalf("%d of %d segments are buy buttons: recovery is too loose", buttons, len(res.Segments))
 	}
 }
+
+// A block of identical links dedupes to one element, and that element must not
+// keep the whole backing array alive: length is what every size accounting
+// downstream measures, so slack capacity is memory nothing can see.
+func TestDedupeLinksKeepsNoSlack(t *testing.T) {
+	links := make([]core.Link, 100_000)
+	out := dedupeLinks(links)
+	if len(out) != 1 {
+		t.Fatalf("dedupeLinks kept %d of %d identical links", len(out), len(links))
+	}
+	if cap(out) > 2*len(out) {
+		t.Fatalf("deduped slice holds cap %d for len %d", cap(out), len(out))
+	}
+}

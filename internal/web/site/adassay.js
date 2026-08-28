@@ -17,9 +17,16 @@ const ERRORS = {
   invalid: "That is not an http or https address.",
   failed: "The page could not be read.",
   rate_limited:
-    "Too many pages from this address in the last minute. Wait a moment — or install it and read " +
+    "Too many pages from this address just now. Wait a second — or install it and read " +
     "as many as you like, with no limit and no server in the middle.",
+  busy:
+    "The demo is reading as many pages at once as it will hold. Try again in a moment — " +
+    "or install it, where the only queue is yours.",
 };
+
+const EMPTY =
+  "Nothing came out of that page. adassay reads articles out of HTML: a PDF, a feed, " +
+  "an image or a page that is only markup gives it nothing to work with.";
 
 let current = null;
 let view = "human";
@@ -48,9 +55,18 @@ function render() {
   }
   if (res.error) el("status").append(ERRORS[res.error] || ERRORS.failed);
 
+  // A finding is content, not a failure: it stands even on a page that gave up
+  // no segments at all, which is exactly where it matters most.
+  for (const f of res.hidden || []) el("finding").append(finding(f));
+
   const segments = res.segments || [];
   el("strip").hidden = segments.length === 0;
-  if (!segments.length) return;
+  if (!segments.length) {
+    // A fetch can succeed and still yield nothing: without this the page just
+    // goes blank, which reads as a broken demo rather than an answer.
+    if (!res.error && !el("finding").hasChildNodes()) el("status").append(EMPTY);
+    return;
+  }
 
   el("tally").append(
     tally("paragraphs", segments.length),
@@ -58,7 +74,6 @@ function render() {
     tally("queried", count(segments, "flag"), "n-query"),
     tally("hidden", (res.hidden || []).length),
   );
-  for (const f of res.hidden || []) el("finding").append(finding(f));
 
   el("doctitle").textContent = res.title || "";
   el("note").textContent = note(segments);
@@ -109,15 +124,12 @@ function sheet(segments) {
   for (const s of segments) {
     const article = tag("article", `seg ${CLASS[s.verdict] || ""}`.trim());
     article.append(tag("p", "seg__text", s.text));
-    if (s.verdict === "keep") {
-      article.append(tag("div"));
-      frag.append(article);
-      continue;
+    if (s.verdict !== "keep") {
+      const mark = tag("aside", "mark");
+      mark.append(tag("span", "mark__verdict", LABEL[s.verdict]));
+      mark.append(tag("span", "mark__reasons", (s.reasons || []).join(", ")));
+      article.append(mark);
     }
-    const mark = tag("aside", "mark");
-    mark.append(tag("span", "mark__verdict", LABEL[s.verdict]));
-    mark.append(tag("span", "mark__reasons", (s.reasons || []).join(", ")));
-    article.append(mark);
     frag.append(article);
   }
   return frag;
@@ -138,8 +150,15 @@ function agent(text) {
   return pre;
 }
 
+function busy(on) {
+  el("submit").disabled = on;
+  for (const chip of chips) chip.disabled = on;
+}
+
+// busy() disables every entry point before the first await, so one request is
+// in flight at a time and a slow answer cannot overwrite a later one.
 async function load(request) {
-  el("submit").disabled = true;
+  busy(true);
   current = null;
   render();
   el("status").append("Reading…");
@@ -148,7 +167,7 @@ async function load(request) {
   } catch {
     current = { error: "failed" };
   }
-  el("submit").disabled = false;
+  busy(false);
   render();
 }
 

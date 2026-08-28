@@ -11,6 +11,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/time/rate"
 
@@ -31,6 +32,8 @@ var assets = []string{
 	"adassay.js",
 	"fonts/source-serif-4-latin-cyrillic.woff2",
 	"fonts/jetbrains-mono-latin-cyrillic.woff2",
+	// OFL-1.1 asks that the licence travel with the fonts it covers.
+	"fonts/LICENSE",
 }
 
 // maxRequestBody is generous for a JSON object holding one URL.
@@ -43,7 +46,19 @@ const (
 
 	maxCached = 256
 	cacheTTL  = 5 * time.Minute
+	// A result carries the page's whole visible text, and the cache holds it for
+	// cacheTTL. Counting entries alone bounds nothing: maxCached results grown
+	// from pages of fetch.MaxBody would retain gigabytes long after the
+	// in-flight limit below has let them go. A page past this size is simply not
+	// cached — re-analysing it costs a slot, which is the bound that holds.
+	maxEntryBytes = 256 << 10
 )
+
+// maxInFlight bounds concurrent analyses. The rate limiter counts requests per
+// address, which does not bound them across addresses, and one analysis holds a
+// page of up to fetch.MaxBody plus the two DOMs extract parses from it — so an
+// unbounded burst is an out-of-memory kill rather than a slowdown.
+const maxInFlight = 4
 
 // response is core.Result with room for a failure code. render.JSON cannot be
 // reused: it encodes core.Result, which has nowhere to put one.
@@ -60,6 +75,7 @@ var status = map[string]int{
 	"failed":       http.StatusBadGateway,
 	"thin":         http.StatusOK,
 	"rate_limited": http.StatusTooManyRequests,
+	"busy":         http.StatusServiceUnavailable,
 }
 
 func write(w http.ResponseWriter, res core.Result, code string) {
@@ -67,12 +83,8 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 	res = render.Safe(res)
 
 	st := http.StatusOK
-	if code != "" {
-		if s, ok := status[code]; ok {
-			st = s
-		} else {
-			st = http.StatusBadGateway
-		}
+	if s, ok := status[code]; ok {
+		st = s
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(st)
@@ -83,16 +95,30 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 	_ = enc.Encode(response{Result: res, Error: code})
 }
 
-func newMux(a *Analyzer) *http.ServeMux {
+// goGet answers the meta-tag page for every path the go command probes.
+// Resolving adassay.com/cmd/adassay walks that path and its prefixes, and each
+// probe is a plain GET the mux would 404 before the go-import tag is read.
+func goGet(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("go-get") == "1" && (r.Method == "GET" || r.Method == "HEAD") {
+			http.ServeFileFS(w, r, siteRoot, "index.html")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func newMux(a *Analyzer) http.Handler {
 	mux := http.NewServeMux()
 	lim, c, cases := newLimiter(), newCache(), newCases(a)
+	sem := make(chan struct{}, maxInFlight)
 	static := http.FileServerFS(siteRoot)
 	mux.Handle("GET /{$}", static)
 	for _, name := range assets {
 		mux.Handle("GET /"+name, static)
 	}
 	mux.HandleFunc("POST /api/analyze", func(w http.ResponseWriter, r *http.Request) {
-		handleAnalyze(w, r, a, lim, c)
+		handleAnalyze(w, r, a, lim, c, sem)
 	})
 	mux.HandleFunc("GET /api/case/{slug}", func(w http.ResponseWriter, r *http.Request) {
 		handleCase(w, r, cases)
@@ -100,12 +126,13 @@ func newMux(a *Analyzer) *http.ServeMux {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	return mux
+	return goGet(mux)
 }
 
-func handleAnalyze(w http.ResponseWriter, r *http.Request, a *Analyzer, lim *limiter, c *cache) {
+func handleAnalyze(w http.ResponseWriter, r *http.Request, a *Analyzer, lim *limiter, c *cache, sem chan struct{}) {
 	if !lim.allow(clientIP(r)) {
-		w.Header().Set("Retry-After", "60")
+		// One token returns a second later; asking for a minute would be a lie.
+		w.Header().Set("Retry-After", "1")
 		write(w, core.Result{}, "rate_limited")
 		return
 	}
@@ -120,6 +147,17 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request, a *Analyzer, lim *lim
 
 	if res, code, ok := c.get(req.URL); ok {
 		write(w, res, code)
+		return
+	}
+
+	// Taken after the cache lookup: a hit only re-renders an entry bounded by
+	// maxEntryBytes, which is not what the slot is guarding against.
+	select {
+	case sem <- struct{}{}:
+		defer func() { <-sem }()
+	default:
+		w.Header().Set("Retry-After", "1")
+		write(w, core.Result{}, "busy")
 		return
 	}
 
@@ -220,6 +258,10 @@ func (c *cache) get(url string) (core.Result, string, bool) {
 }
 
 func (c *cache) put(url string, res core.Result, code string) {
+	if size(res) > maxEntryBytes {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -230,6 +272,27 @@ func (c *cache) put(url string, res core.Result, code string) {
 		}
 	}
 	c.entries[url] = entry{res: res, code: code, at: time.Now()}
+}
+
+// size counts what a cached result keeps alive. The strings are not the whole
+// of it: a page of a hundred thousand one-word paragraphs is a few hundred
+// kilobytes of text holding tens of megabytes of backing array, so every
+// element pays its struct's width whatever it carries.
+func size(res core.Result) int {
+	n := len(res.Text) + len(res.Title)
+	for _, s := range res.Segments {
+		n += int(unsafe.Sizeof(s)) + len(s.ID) + len(s.Text)
+		for _, r := range s.Reasons {
+			n += int(unsafe.Sizeof(r)) + len(r)
+		}
+		for _, l := range s.Links {
+			n += int(unsafe.Sizeof(l)) + len(l.Href) + len(l.Rel) + len(l.Text)
+		}
+	}
+	for _, f := range res.Hidden {
+		n += int(unsafe.Sizeof(f)) + len(f.Kind) + len(f.Sample)
+	}
+	return n
 }
 
 func (c *cache) expire() {

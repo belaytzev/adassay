@@ -1,5 +1,5 @@
 @font-face {
-  font-family: "Source Serif 4";
+  font-family: "Adassay Serif";
   src: url("fonts/source-serif-4-latin-cyrillic.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
@@ -23,7 +23,7 @@
   --pencil-red:  #A8382B;
   --pencil-blue: #2B4F86;
 
-  --read: "Source Serif 4", Georgia, "Iowan Old Style", serif;
+  --read: "Adassay Serif", Georgia, "Iowan Old Style", serif;
   --mach: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -89,7 +89,8 @@ body {
   background: var(--ink); color: var(--paper);
   font: 500 0.9rem/1 var(--mach); cursor: pointer;
 }
-.btn[disabled] { opacity: 0.5; cursor: progress; }
+.btn[disabled],
+.chip[disabled] { opacity: 0.5; cursor: progress; }
 
 .chips { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .chips span { font-size: 0.78rem; color: var(--ink-faint); }
@@ -203,7 +204,4 @@ body {
 @media (max-width: 46rem) {
   .seg { grid-template-columns: 1fr; gap: 0.5rem; }
   .mark { padding-top: 0; padding-left: 1rem; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .seg { transition: opacity 120ms linear; }
 }

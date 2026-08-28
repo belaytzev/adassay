@@ -125,15 +125,22 @@ func TestRefusePredicates(t *testing.T) {
 		{"169.254.169.254", true, true},
 		{"100.64.0.1", true, true},
 		{"0.0.0.0", true, true},
+		{"fd00::1", true, true},
+		{"fe80::1", true, true},
+		// 4-in-6 is what a dual-stack resolver hands the dialer.
+		{"::ffff:127.0.0.1", false, true},
+		{"::ffff:192.168.1.5", true, true},
+		{"::ffff:100.64.0.1", true, true},
+		{"::ffff:169.254.169.254", true, true},
 		{"93.184.216.34", false, false},
 	}
 	for _, c := range cases {
 		t.Run(c.addr, func(t *testing.T) {
-			ip := netip.MustParseAddr(c.addr)
-			if got := refuse(ip) != nil; got != c.refused {
+			target := netip.AddrPortFrom(netip.MustParseAddr(c.addr), 80)
+			if got := refuse(target) != nil; got != c.refused {
 				t.Errorf("refuse(%s) refused = %v, want %v", c.addr, got, c.refused)
 			}
-			if got := refusePublic(ip) != nil; got != c.pubRefused {
+			if got := refusePublic(target) != nil; got != c.pubRefused {
 				t.Errorf("refusePublic(%s) refused = %v, want %v", c.addr, got, c.pubRefused)
 			}
 		})
@@ -155,5 +162,25 @@ func TestGetPublicRefusesLoopbackThatGetStillFetches(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "private address") {
 		t.Errorf("err = %v, want the dialer refusal", err)
+	}
+}
+
+// A redirect chooses its own port, so the guard every hop passes through has to
+// be the one that refuses it: checking the submitted URL only covers hop one.
+func TestPublicGuardRefusesNonDefaultPorts(t *testing.T) {
+	public := netip.MustParseAddr("93.184.216.34")
+	for _, port := range []uint16{22, 25, 6379, 8080, 11211} {
+		if err := refusePublic(netip.AddrPortFrom(public, port)); err == nil {
+			t.Errorf("refusePublic dialled port %d", port)
+		}
+	}
+	for _, port := range []uint16{80, 443} {
+		if err := refusePublic(netip.AddrPortFrom(public, port)); err != nil {
+			t.Errorf("refusePublic(port %d) = %v, want no refusal", port, err)
+		}
+	}
+	// The CLI talks to whatever a developer runs locally, so it keeps every port.
+	if err := refuse(netip.AddrPortFrom(public, 8080)); err != nil {
+		t.Errorf("refuse(port 8080) = %v, want no refusal", err)
 	}
 }

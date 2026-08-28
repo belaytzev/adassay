@@ -27,10 +27,11 @@ type demoCase struct {
 func newCases(a *Analyzer) map[string]demoCase {
 	cases := make(map[string]demoCase, len(caseURLs))
 	for slug, pageURL := range caseURLs {
+		// The fixture is embedded, so a miss is a build mistake, not a
+		// runtime condition: it must not open the demo on an empty case.
 		page, err := caseFS.ReadFile("site/cases/" + slug + ".html")
 		if err != nil {
-			cases[slug] = demoCase{code: "failed"}
-			continue
+			panic(err)
 		}
 		fixture := &Analyzer{Cfg: a.Cfg, Fetch: func(string) ([]byte, error) { return page, nil }}
 		res, err := fixture.Analyze(pageURL)
