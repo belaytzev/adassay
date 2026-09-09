@@ -1,30 +1,47 @@
-# adassay
+<div align="center">
+  <img src="static/logo.png" alt="adassay logo" width="200"/>
 
-**An ad blocker for AI agents.**
+  # adassay
 
-[![Release](https://img.shields.io/github/v/release/belaytzev/adassay?label=release)](https://github.com/belaytzev/adassay/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/belaytzev/adassay/releases/latest)
-[![Try it](https://img.shields.io/badge/try%20it-adassay.com-black.svg)](https://adassay.com)
+  **An ad blocker for AI agents**
 
-Web pages increasingly contain text written to be quoted by AI rather than read by people:
-affiliate roundups, paid inserts dressed as editorial, and instructions hidden where only a
-parser will find them. An agent reading such a page swallows all of it as fact.
+  [![Release](https://img.shields.io/github/v/release/belaytzev/adassay?label=release)](https://github.com/belaytzev/adassay/releases/latest)
+  [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/belaytzev/adassay/releases/latest)
+  [![Go](https://img.shields.io/badge/go-1.25+-00ADD8.svg)](https://go.dev/)
+  [![Try it](https://img.shields.io/badge/try%20it-adassay.com-black.svg)](https://adassay.com)
 
-adassay sits between the page and the agent. It cuts what the publisher itself marked as
-commercial, flags what is doubtful, and reports text the page hides from human readers.
+  Web pages increasingly contain text written to be quoted by AI rather than read by people:
+  affiliate roundups, paid inserts dressed as editorial, and instructions hidden where only a
+  parser will find them. An agent reading such a page swallows all of it as fact.
+  **adassay sits between the page and the agent.** It cuts what the publisher itself marked as
+  commercial, flags what is doubtful, and reports text the page hides from human readers.
+</div>
 
-**[Quick start](#quick-start)** ·
-[What it does](#what-it-actually-does) ·
-[Use it](#use-it) ·
-[How it decides](#how-it-decides) ·
-[Privacy](#privacy) ·
-[Known limits](#known-limits) ·
-[Going deeper](#going-deeper) ·
-[Contributing](#contributing) ·
-[Licence](#licence)
+---
 
-## Quick start
+## 📖 Table of contents
+
+- [🚀 Quick start](#-quick-start)
+  - [📄 What comes out](#-what-comes-out)
+  - [🤖 Give it to an agent](#-give-it-to-an-agent)
+- [✨ What it actually does](#-what-it-actually-does)
+  - [⚖️ How it compares](#️-how-it-compares)
+- [🧰 Use it](#-use-it)
+  - [💻 From the command line](#-from-the-command-line)
+  - [🔌 From an AI agent](#-from-an-ai-agent)
+  - [🗳️ Correcting it](#️-correcting-it)
+  - [📦 What you get back](#-what-you-get-back)
+- [🧠 How it decides](#-how-it-decides)
+- [🔒 Privacy](#-privacy)
+- [⚠️ Known limits](#️-known-limits)
+- [🔬 Going deeper](#-going-deeper)
+- [🤝 Contributing](#-contributing)
+- [📜 Licence](#-licence)
+
+---
+
+## 🚀 Quick start
 
 ```sh
 brew install belaytzev/tap/adassay        # macOS and Linux, amd64 and arm64
@@ -35,10 +52,10 @@ With Go 1.25 or newer, `go install adassay.com/cmd/adassay@latest` does the same
 every platform are on the [releases page](https://github.com/belaytzev/adassay/releases/latest),
 and the source builds with `go build ./cmd/adassay`.
 
-No install at all: paste a URL at **[adassay.com](https://adassay.com)** and see every paragraph
-marked kept, cut or queried, with the reasons in the margin.
+> 🌐 **No install at all:** paste a URL at **[adassay.com](https://adassay.com)** and see every
+> paragraph marked kept, cut or queried, with the reasons in the margin.
 
-### What comes out
+### 📄 What comes out
 
 A six-paragraph keyboard roundup goes in. This is what an agent gets back:
 
@@ -60,11 +77,15 @@ Split boards look like an affectation until a wrist starts hurting …
 Hot swap sockets are the feature to insist on …
 ```
 
-Six paragraphs in: three passed untouched, two stayed with a marker saying why they are
-doubtful, and the one that read *"Use code TYPE20 at checkout for twenty percent off"* is gone.
+| | Paragraphs | What happened |
+|---|:---:|---|
+| ✅ **Kept** | 3 | passed through untouched |
+| 🏷️ **Flagged** | 2 | stayed, wrapped in a marker that says why they are doubtful |
+| ✂️ **Cut** | 1 | *"Use code TYPE20 at checkout for twenty percent off"* — gone |
+
 Nothing doubtful is removed silently — it stays, marked, and the agent decides.
 
-### Give it to an agent
+### 🤖 Give it to an agent
 
 `adassay-mcp` is an MCP server over stdio with two tools: `fetch_clean(url)` downloads a page
 and returns it filtered; `check_text(text)` judges text you already have, without touching the
@@ -80,27 +101,31 @@ network.
 
 Point the agent at `fetch_clean` instead of a plain fetch tool. That is the whole integration.
 
-## What it actually does
+---
+
+## ✨ What it actually does
 
 Be clear about the boundary before you install it.
 
-**It reliably removes advertising the publisher declared.** Links tagged `rel="sponsored"`,
-affiliate redirectors, promo codes next to promo wording, paid-placement disclosures. On a
-labelled corpus of 52 pages and 6820 segments it removes 94% of that class and has never
-removed an honest paragraph — the one number this project refuses to trade away.
+- ✂️ **Reliably removes advertising the publisher declared.** Links tagged `rel="sponsored"`,
+  affiliate redirectors, promo codes next to promo wording, paid-placement disclosures. On a
+  labelled corpus of 52 pages and 6820 segments it removes 94% of that class and has never
+  removed an honest paragraph — the one number this project refuses to trade away.
+- 🕵️ **Detects text aimed at parsers rather than readers.** `display:none`, off-screen
+  positioning, text painted the colour of its background, invisible unicode, prompts tucked
+  into `alt` and `meta`. This is the part nothing else does, and it doubles as an indirect
+  prompt-injection detector.
+- 🏷️ **Never deletes what it is unsure about.** Doubtful paragraphs stay in the text with a
+  marker and the reasons; the agent, or your vote, decides.
+- 🔒 **Keeps what you read to itself.** Verdicts are stored as hashes; nothing leaves the
+  machine unless you point it at a shared database, and even then never a word of text.
+- ❌ **Does not reliably catch native advertising.** A paragraph that sells a product while
+  carrying no link, no price and no disclosure reads exactly like an enthusiastic
+  recommendation, and the rule layer currently catches none of it. A local model can judge the
+  grey zone if you enable one, and it helps — but this is an open problem, not a solved one.
+  If that class is what you need, this tool is not there yet.
 
-**It detects text aimed at parsers rather than readers.** `display:none`, off-screen
-positioning, text painted the colour of its background, invisible unicode, prompts tucked
-into `alt` and `meta`. This is the part nothing else does, and it doubles as an indirect
-prompt-injection detector.
-
-**It does not reliably catch native advertising.** A paragraph that sells a product while
-carrying no link, no price and no disclosure reads exactly like an enthusiastic
-recommendation, and the rule layer currently catches none of it. A local model can judge the
-grey zone if you enable one, and it helps — but this is an open problem, not a solved one.
-If that class is what you need, this tool is not there yet.
-
-### How it compares
+### ⚖️ How it compares
 
 | | What it removes | What it misses |
 |---|---|---|
@@ -109,9 +134,11 @@ If that class is what you need, this tool is not there yet.
 | Prompt-injection guardrails | instructions aimed at the model | ordinary marketing prose |
 | **adassay** | declared advertising inside the article, plus hidden text | undeclared native advertising |
 
-## Use it
+---
 
-### From the command line
+## 🧰 Use it
+
+### 💻 From the command line
 
 ```sh
 adassay https://example.com/article           # filtered markdown
@@ -127,19 +154,19 @@ nothing), `--json`, `--verbose`.
 Exit codes carry meaning, so scripts and CI can act on them:
 
 | Code | Meaning |
-|---|---|
-| 0 | page read and filtered |
-| 1 | something went wrong |
-| 2 | hidden text found — the document still prints, but the source hid something from readers |
-| 3 | the site refused the request: 403, 401, 429 or a bot wall |
-| 4 | extraction looks implausible — far more visible text on the page than was extracted, usually a JavaScript-rendered article |
+|:---:|---|
+| `0` | ✅ page read and filtered |
+| `1` | ❌ something went wrong |
+| `2` | 🕵️ hidden text found — the document still prints, but the source hid something from readers |
+| `3` | 🚫 the site refused the request: 403, 401, 429 or a bot wall |
+| `4` | 🫥 extraction looks implausible — far more visible text on the page than was extracted, usually a JavaScript-rendered article |
 
-### From an AI agent
+### 🔌 From an AI agent
 
-See [Give it to an agent](#give-it-to-an-agent) above. `adassay-mcp` takes `--config` and
+See [Give it to an agent](#-give-it-to-an-agent) above. `adassay-mcp` takes `--config` and
 `--db`, and `-version` prints its version.
 
-### Correcting it
+### 🗳️ Correcting it
 
 Your vote overrides every layer, immediately and locally:
 
@@ -151,18 +178,20 @@ adassay vote "exact paragraph text" --ad         # same, hash computed on the sp
 
 An argument that is neither 64 hex characters nor a URL is treated as segment text.
 
-### What you get back
+### 📦 What you get back
 
 Every paragraph ends up in one of three states:
 
-- **Keep** — passed through untouched
-- **Flag** — kept in the text, wrapped in `[[adassay:flag {...}]] … [[/adassay:flag]]` with the reasons
-- **Drop** — removed
+- ✅ **Keep** — passed through untouched
+- 🏷️ **Flag** — kept in the text, wrapped in `[[adassay:flag {...}]] … [[/adassay:flag]]` with the reasons
+- ✂️ **Drop** — removed
 
 Doubtful content is never removed silently. It stays, marked, and the agent decides. That is
 the whole design: a filter that eats facts is worse than no filter.
 
-## How it decides
+---
+
+## 🧠 How it decides
 
 Three layers, cheapest first.
 
@@ -203,7 +232,9 @@ judge:
 
 Without a model running, doubtful paragraphs simply stay flagged. Nothing else changes.
 
-## Privacy
+---
+
+## 🔒 Privacy
 
 **Locally.** Verdicts live in sqlite under `$ADASSAY_DB` or the user cache directory. Neither
 page text nor domains are stored in the clear — only SHA-256 of normalised text. Someone who
@@ -238,33 +269,37 @@ precedence over the file and avoids registering a new install on every container
 Leaving `ADASSAY_SHARE_URL` unset disables both. A run from stdin without `--db` opens no
 database at all.
 
-## Known limits
+---
+
+## ⚠️ Known limits
 
 Stated plainly, because finding them yourself later is worse.
 
-- **Undeclared native advertising is not caught.** The measured coverage of that class by the
+- ❌ **Undeclared native advertising is not caught.** The measured coverage of that class by the
   rule layer is zero. It is the main open problem.
-- **External CSS is invisible.** L1 reads inline styles and attributes. A class hidden by a
+- 🎨 **External CSS is invisible.** L1 reads inline styles and attributes. A class hidden by a
   linked stylesheet is not detected.
-- **JavaScript-rendered pages come back nearly empty** and exit 4. No headless browser is
+- 🫥 **JavaScript-rendered pages come back nearly empty** and exit 4. No headless browser is
   involved, by choice.
-- **Cloudflare challenges win.** Sites behind a JS challenge return exit 3. Honest headers
+- 🚫 **Cloudflare challenges win.** Sites behind a JS challenge return exit 3. Honest headers
   cannot pass those.
-- **English and Russian only.** Pattern lists cover no other language yet, and Chinese needs a
+- 🌍 **English and Russian only.** Pattern lists cover no other language yet, and Chinese needs a
   different matching mode entirely, since it has no word boundaries.
-- **Consensus cannot fix a systematic error.** If every client runs the same rules, a shared
+- 🔁 **Consensus cannot fix a systematic error.** If every client runs the same rules, a shared
   mistake gets confirmed rather than corrected. Human votes are the only counterweight.
-- **Shared-database trust is deterrence, not proof.** Registration is free; what it buys is
+- ⏳ **Shared-database trust is deterrence, not proof.** Registration is free; what it buys is
   time, since a fresh install carries no weight for a day and a misbehaving one loses what it
   earned. A patient attacker can still age installs.
 
-## Going deeper
+---
+
+## 🔬 Going deeper
 
 Reference material for tuning the rules, running your own instances, and hosting the demo.
 Nothing here is needed to use the tool.
 
 <details>
-<summary><strong>Configuration</strong> — your own <code>rules.yaml</code> on top of the built-in one</summary>
+<summary>⚙️ <strong>Configuration</strong> — your own <code>rules.yaml</code> on top of the built-in one</summary>
 
 The built-in `internal/config/rules.yaml` is the default. Your file layers **on top**, so list
 only what you change; an unknown key is an error rather than silence. Lists are replaced
@@ -320,7 +355,7 @@ l2:
 </details>
 
 <details>
-<summary><strong>Tuning against a corpus</strong> — <code>adassay calibrate</code> and the five numbers it reports</summary>
+<summary>📐 <strong>Tuning against a corpus</strong> — <code>adassay calibrate</code> and the five numbers it reports</summary>
 
 ```sh
 cd testdata/corpus && ./fetch.sh    # once: download the captured pages
@@ -354,7 +389,7 @@ widest coverage, then the least noise.
 </details>
 
 <details>
-<summary><strong>The demo page</strong> — what runs at adassay.com, and how to host your own</summary>
+<summary>🖥️ <strong>The demo page</strong> — what runs at adassay.com, and how to host your own</summary>
 
 A proof sheet: paste a URL, or open one of the two saved cases, and see which paragraphs were
 cut, which were queried, and which were left alone, with the reasons in the margin. A toggle
@@ -404,7 +439,7 @@ volume; a Deployment with a readiness probe on `/healthz` is the whole manifest.
 </details>
 
 <details>
-<summary><strong>Running the shared database</strong> — the AGPL server, its endpoints, quorum and limits</summary>
+<summary>🗄️ <strong>Running the shared database</strong> — the AGPL server, its endpoints, quorum and limits</summary>
 
 ```sh
 docker build -t adassay-server .
@@ -453,7 +488,7 @@ Publish it through a tunnel rather than a port forward, and list the tunnel's ad
 </details>
 
 <details>
-<summary><strong>Seeding the database</strong> — filling a fresh instance from your own hosts</summary>
+<summary>🌱 <strong>Seeding the database</strong> — filling a fresh instance from your own hosts</summary>
 
 A fresh database serves nothing: quorum needs several independent installs to agree, and
 until they do, every client falls back to computing verdicts locally. `adassay seed` fills it
@@ -482,31 +517,31 @@ is the pattern they block.
 
 </details>
 
-## Contributing
+---
+
+## 🤝 Contributing
 
 The most useful contributions, in order:
 
-**Use it.** Verdicts accumulate from ordinary use, with no effort required. That is the whole
-point of the design: the database grows because people run the tool, not because they annotate
-anything.
-
-**Vote when it is wrong.** `adassay vote` is the only correction that outranks every automatic
-layer, and the only defence against every client repeating the same mistake.
-
-**Send affiliate hosts and redirectors.** New networks appear constantly and local ones are
-invisible from outside their market. This is a three-line change to `rules.yaml`.
-
-**Add a language.** Pattern lists cover English and Russian. A native speaker adds a working
-set in minutes; guessing takes an hour and gets the nuances wrong.
-
-**Add a labelled page.** A page plus the paragraphs that are advertising is the only way to
-prove a change helped.
+- 🚀 **Use it.** Verdicts accumulate from ordinary use, with no effort required. That is the whole
+  point of the design: the database grows because people run the tool, not because they annotate
+  anything.
+- 🗳️ **Vote when it is wrong.** `adassay vote` is the only correction that outranks every automatic
+  layer, and the only defence against every client repeating the same mistake.
+- 🔗 **Send affiliate hosts and redirectors.** New networks appear constantly and local ones are
+  invisible from outside their market. This is a three-line change to `rules.yaml`.
+- 🌍 **Add a language.** Pattern lists cover English and Russian. A native speaker adds a working
+  set in minutes; guessing takes an hour and gets the nuances wrong.
+- 🏷️ **Add a labelled page.** A page plus the paragraphs that are advertising is the only way to
+  prove a change helped.
 
 What stays with the maintainers: thresholds and weights, the hashing and normalisation, and
 where the line between advertising and opinion falls. The first two silently break precision
 and the database; the third is the project's position rather than a matter of vote.
 
-## Licence
+---
+
+## 📜 Licence
 
 Three licences, for three different kinds of thing.
 
