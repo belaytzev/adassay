@@ -3,6 +3,12 @@
 docs/
 dist/
 
+# go build ./cmd/... drops binaries in the root
+/adassay
+/adassay-mcp
+/adassay-server
+/adassay-web
+
 # Captured corpus pages belong to their publishers; fetch.sh downloads them.
 testdata/corpus/ad_*.html
 testdata/corpus/clean_*.html

@@ -2,6 +2,11 @@
 
 An ad blocker for AI agents.
 
+[![Release](https://img.shields.io/github/v/release/belaytzev/adassay?label=release)](https://github.com/belaytzev/adassay/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/belaytzev/adassay/releases/latest)
+[![Try it](https://img.shields.io/badge/try%20it-adassay.com-black.svg)](https://adassay.com)
+
 Web pages increasingly contain text written to be quoted by AI rather than read by people:
 affiliate roundups, paid inserts dressed as editorial, and instructions hidden where only a
 parser will find them. An agent reading such a page swallows all of it as fact.
