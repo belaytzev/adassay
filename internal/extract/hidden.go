@@ -107,7 +107,11 @@ func styleKind(st map[string]string) string {
 	case st["display"] == "none",
 		st["visibility"] == "hidden",
 		isZero(st["opacity"]),
-		isZeroLength(st["font-size"]):
+		isZeroLength(st["font-size"]),
+		clipped(st["clip"]),
+		inset(st["clip-path"]),
+		st["overflow"] == "hidden" && (isZeroLength(st["height"]) || isZeroLength(st["max-height"]) ||
+			isZeroLength(st["width"]) || isZeroLength(st["max-width"])):
 		return KindCSSHidden
 	}
 
@@ -116,10 +120,69 @@ func styleKind(st map[string]string) string {
 			return KindOffScreen
 		}
 	}
+	if transparent(st["color"]) || transparent(st["-webkit-text-fill-color"]) {
+		return KindColor
+	}
 	if c, bg := normColor(st["color"]), background(st); c != "" && c == bg {
 		return KindColor
 	}
 	return ""
+}
+
+func transparent(v string) bool {
+	if v == "transparent" {
+		return true
+	}
+	open := strings.IndexByte(v, '(')
+	if open < 0 || !strings.HasSuffix(v, ")") {
+		return false
+	}
+	parts := strings.FieldsFunc(v[open+1:len(v)-1], func(r rune) bool { return r == ',' || r == '/' || r == ' ' })
+	return len(parts) == 4 && isZeroLength(parts[3])
+}
+
+// rect(top, right, bottom, left) shows nothing once right <= left or bottom <= top.
+func clipped(v string) bool {
+	v, ok := strings.CutPrefix(v, "rect(")
+	if !ok {
+		return false
+	}
+	parts := strings.FieldsFunc(strings.TrimSuffix(v, ")"), func(r rune) bool { return r == ',' || r == ' ' })
+	if len(parts) != 4 {
+		return false
+	}
+	var side [4]float64
+	for i, p := range parts {
+		f, ok := length(p)
+		if !ok {
+			return false
+		}
+		side[i] = f
+	}
+	return side[1] <= side[3] || side[2] <= side[0]
+}
+
+// ponytail: inset() with percentages only, circle/polygon if a corpus page uses them
+func inset(v string) bool {
+	v, ok := strings.CutPrefix(v, "inset(")
+	if !ok {
+		return false
+	}
+	v, _, _ = strings.Cut(strings.TrimSuffix(v, ")"), " round")
+	parts := strings.Fields(v)
+	if len(parts) == 0 || len(parts) > 4 {
+		return false
+	}
+	order := [][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(parts)-1]
+	var side [4]float64
+	for i, j := range order {
+		f, ok := length(parts[j])
+		if !ok || (f != 0 && !strings.HasSuffix(parts[j], "%")) {
+			return false
+		}
+		side[i] = f
+	}
+	return side[0]+side[2] >= 100 || side[1]+side[3] >= 100
 }
 
 func background(st map[string]string) string {
@@ -172,7 +235,7 @@ func parseStyle(s string) map[string]string {
 		return nil
 	}
 	st := map[string]string{}
-	for _, decl := range strings.Split(s, ";") {
+	for _, decl := range strings.Split(stripComments(s), ";") {
 		prop, val, ok := strings.Cut(decl, ":")
 		if !ok {
 			continue
@@ -184,6 +247,21 @@ func parseStyle(s string) map[string]string {
 		st[strings.ToLower(strings.TrimSpace(prop))] = strings.ToLower(strings.Join(strings.Fields(val), " "))
 	}
 	return st
+}
+
+// A comment separates tokens the way whitespace does, so it becomes a space.
+func stripComments(s string) string {
+	for {
+		i := strings.Index(s, "/*")
+		if i < 0 {
+			return s
+		}
+		j := strings.Index(s[i+2:], "*/")
+		if j < 0 {
+			return s[:i]
+		}
+		s = s[:i] + " " + s[i+2+j+2:]
+	}
 }
 
 func isZero(v string) bool {
