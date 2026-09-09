@@ -295,16 +295,17 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 	}
 	defer tx.Rollback()
 
+	btx := s.tx(tx)
 	row := core.BucketEntry{Hash: e.Hash, Verdict: e.Verdict, Reasons: e.Reasons, Source: e.Source}
 
 	var curVerdict, curSource, curReasons string
 	var curVotes, curPublished int
-	challenger, refused := false, false
+	agree, challenger, refused := false, false, false
 
 	// Publication is its own fact, not a shade of source: a row can be served
 	// because a seeder vouched for it while still recording who decided it.
 	publish := false
-	switch err := s.tx(tx).QueryRow(
+	switch err := btx.QueryRow(
 		`SELECT verdict, source, reasons, votes, published FROM verdicts WHERE hash = ? AND norm_version = ?`,
 		e.Hash, normVersion).Scan(&curVerdict, &curSource, &curReasons, &curVotes, &curPublished); {
 	case errors.Is(err, sql.ErrNoRows):
@@ -312,19 +313,49 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 		return false, 0, fmt.Errorf("server: submit: %w", err)
 
 	case curVerdict == e.Verdict.String():
+		agree = true
 		row.Source, row.Reasons = curSource, decodeReasons(curReasons)
 		publish = curPublished == 1
 
-	case sourceRank(e.Source) < sourceRank(curSource) && curVotes >= s.quorum:
-		s.mx.diverged()
-		refused = true
 	default:
 		// The verdict itself changed, so an earlier vouch does not carry.
 		s.mx.diverged()
 		challenger = true
+		// The stored count is a snapshot from the last write; backing keeps
+		// growing as installs age, so the rank guard has to count live.
+		if sourceRank(e.Source) < sourceRank(curSource) {
+			standing, err := backers(btx, s.d.clampSum, e.Hash, normVersion, curVerdict)
+			if err != nil {
+				return false, 0, err
+			}
+			if standing >= s.quorum {
+				refused, challenger, curVotes = true, false, standing
+			}
+		}
 	}
 
-	btx := s.tx(tx)
+	// Reputation moves once per install and hash: siding with a verdict that
+	// reached quorum without this install upholds it, contradicting one refutes it.
+	var known int
+	if err := btx.QueryRow(
+		`SELECT COUNT(*) FROM confirmations WHERE hash = ? AND norm_version = ? AND client_id = ?`,
+		e.Hash, normVersion, clientID).Scan(&known); err != nil {
+		return false, 0, fmt.Errorf("server: submit: %w", err)
+	}
+	uphold := false
+	if known == 0 && agree {
+		others, err := backers(btx, s.d.clampSum, e.Hash, normVersion, curVerdict)
+		if err != nil {
+			return false, 0, err
+		}
+		uphold = others >= s.quorum
+	}
+	if known == 0 && refused {
+		if _, err := btx.Exec(`UPDATE installs SET refuted = refuted + 1 WHERE client_id = ?`, clientID); err != nil {
+			return false, 0, fmt.Errorf("server: submit: %w", err)
+		}
+	}
+
 	if err := confirm(btx, e.Hash, normVersion, clientID, e.Verdict.String(), e.Source); err != nil {
 		return false, 0, err
 	}
@@ -337,6 +368,12 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 	n, err := backers(btx, s.d.clampSum, e.Hash, normVersion, e.Verdict.String())
 	if err != nil {
 		return false, 0, err
+	}
+	// Counted after this hash's backing so the raise applies to the next one.
+	if uphold {
+		if _, err := btx.Exec(`UPDATE installs SET upheld = upheld + 1 WHERE client_id = ?`, clientID); err != nil {
+			return false, 0, fmt.Errorf("server: submit: %w", err)
+		}
 	}
 
 	reach := n
@@ -352,6 +389,14 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 			return false, 0, fmt.Errorf("server: submit: %w", err)
 		}
 		return true, curVotes, nil
+	}
+	if challenger {
+		if _, err := btx.Exec(
+			`UPDATE installs SET refuted = refuted + 1 WHERE client_id IN
+			 (SELECT client_id FROM confirmations WHERE hash = ? AND norm_version = ? AND verdict = ?)`,
+			e.Hash, normVersion, curVerdict); err != nil {
+			return false, 0, fmt.Errorf("server: submit: %w", err)
+		}
 	}
 	row.Votes = n
 	if err := upsert(btx, row, normVersion, publish); err != nil {
