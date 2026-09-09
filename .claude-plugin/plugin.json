@@ -1,0 +1,11 @@
+{
+  "name": "adassay",
+  "description": "Read web pages through the adassay CLI: declared advertising cut, doubtful paragraphs marked, hidden text reported.",
+  "author": {
+    "name": "Alexey Belaytzev"
+  },
+  "homepage": "https://adassay.com",
+  "repository": "https://github.com/belaytzev/adassay",
+  "license": "MIT",
+  "keywords": ["web", "fetch", "ads", "prompt-injection", "reader"]
+}
