@@ -1,0 +1,62 @@
+version: 2
+
+project_name: adassay
+
+builds:
+  - id: adassay
+    main: ./cmd/adassay
+    binary: adassay
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+  - id: adassay-mcp
+    main: ./cmd/adassay-mcp
+    binary: adassay-mcp
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+# The source lives on a private forge; releases go to a public GitHub repo
+# that holds nothing but them, so brew can download without credentials.
+release:
+  github:
+    owner: belaytzev
+    name: adassay
+
+homebrew_casks:
+  - repository:
+      owner: belaytzev
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    binaries: [adassay, adassay-mcp]
+    homepage: https://adassay.com
+    description: An ad blocker for AI agents
+    license: MIT
+    # Unsigned binaries: without this Gatekeeper refuses the first run.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/adassay"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/adassay-mcp"]
+          end

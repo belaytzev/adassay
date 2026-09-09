@@ -16,8 +16,13 @@ import (
 func main() {
 	cfgPath := flag.String("config", "", "path to rules.yaml overriding the built-in defaults")
 	dbPath := flag.String("db", "", "path to the local verdict database (default: user cache dir, $"+store.EnvDB+")")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Println("adassay-mcp", version)
+		return
+	}
 	if err := serve(*cfgPath, *dbPath); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

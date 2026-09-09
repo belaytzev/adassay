@@ -31,13 +31,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 			return seed(args[1:], stdout)
 		case "vote":
 			return vote(args[1:], stdout)
+		case "version", "--version", "-version":
+			_, err := fmt.Fprintln(stdout, "adassay", version)
+			return err
 		}
 	}
 
 	fs := flag.NewFlagSet("adassay", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.Usage = func() {
-		fmt.Fprintln(stdout, "usage: adassay [flags] [url]\n       adassay calibrate [flags]\n       adassay seed [flags]\n       adassay vote <url|hash|segment text> --ad|--not-ad\n\nWith no url the page is read from stdin.\n\nFlags:")
+		fmt.Fprintln(stdout, "usage: adassay [flags] [url]\n       adassay calibrate [flags]\n       adassay seed [flags]\n       adassay vote <url|hash|segment text> --ad|--not-ad\n       adassay version\n\nWith no url the page is read from stdin.\n\nFlags:")
 		fs.PrintDefaults()
 	}
 	asJSON := fs.Bool("json", false, "print the full Result as JSON instead of markdown")

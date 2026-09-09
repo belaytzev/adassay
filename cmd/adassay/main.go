@@ -9,6 +9,9 @@ import (
 	"adassay.com/internal/fetch"
 )
 
+// Set by the release build: -X main.version={{.Version}}.
+var version = "dev"
+
 func main() {
 	err := run(os.Args[1:], os.Stdin, os.Stdout)
 	switch {
