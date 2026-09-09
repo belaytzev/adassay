@@ -47,16 +47,14 @@ If that class is what you need, this tool is not there yet.
 Go 1.25 or newer.
 
 ```sh
-go install adassay.com/cmd/adassay@latest
-go install adassay.com/cmd/adassay-mcp@latest   # MCP server, optional
-```
-
-From source:
-
-```sh
 git clone https://git.t1go.net/belaytzev/adassay
-cd adassay && go build ./cmd/adassay
+cd adassay
+go build ./cmd/adassay
+go build ./cmd/adassay-mcp   # MCP server, optional
 ```
+
+`go install adassay.com/...` will work once the module has a public home; the demo page
+deliberately carries no `go-import` tag pointing at a private host.
 
 ## Use it
 

@@ -95,19 +95,6 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 	_ = enc.Encode(response{Result: res, Error: code})
 }
 
-// goGet answers the meta-tag page for every path the go command probes.
-// Resolving adassay.com/cmd/adassay walks that path and its prefixes, and each
-// probe is a plain GET the mux would 404 before the go-import tag is read.
-func goGet(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("go-get") == "1" && (r.Method == "GET" || r.Method == "HEAD") {
-			http.ServeFileFS(w, r, siteRoot, "index.html")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func newMux(a *Analyzer) http.Handler {
 	mux := http.NewServeMux()
 	lim, c, cases := newLimiter(), newCache(), newCases(a)
@@ -126,7 +113,7 @@ func newMux(a *Analyzer) http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	return goGet(mux)
+	return mux
 }
 
 func handleAnalyze(w http.ResponseWriter, r *http.Request, a *Analyzer, lim *limiter, c *cache, sem chan struct{}) {
