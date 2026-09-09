@@ -1,5 +1,7 @@
 <div align="center">
-  <img src="static/logo.png" alt="adassay" width="200"/>
+  <img src="static/logo.png" alt="" width="120"/>
+
+  # adassay
 
   **An ad blocker for AI agents**
 
