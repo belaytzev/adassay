@@ -20,7 +20,7 @@ import (
 	"adassay.com/internal/render"
 )
 
-//go:embed site/index.html site/adassay.css site/adassay.js site/fonts
+//go:embed site/index.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.png site/fonts
 var siteFS embed.FS
 
 var siteRoot, _ = fs.Sub(siteFS, "site")
@@ -30,6 +30,8 @@ var siteRoot, _ = fs.Sub(siteFS, "site")
 var assets = []string{
 	"adassay.css",
 	"adassay.js",
+	"logo.png",
+	"logo-dark.png",
 	"fonts/source-serif-4-latin-cyrillic.woff2",
 	"fonts/jetbrains-mono-latin-cyrillic.woff2",
 	// OFL-1.1 asks that the licence travel with the fonts it covers.

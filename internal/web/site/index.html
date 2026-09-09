@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <meta name="go-import" content="adassay.com git https://github.com/belaytzev/adassay">
 <meta name="go-source" content="adassay.com https://github.com/belaytzev/adassay https://github.com/belaytzev/adassay/tree/main{/dir} https://github.com/belaytzev/adassay/blob/main{/dir}/{file}#L{line}">
 <title>adassay — an ad blocker for AI agents</title>
+<link rel="icon" href="/logo.png" type="image/png">
 <link rel="stylesheet" href="/adassay.css">
 <script src="/adassay.js" defer></script>
 </head>
@@ -14,26 +16,33 @@
 <div class="wrap">
 
   <header class="masthead">
-    <div class="wordmark">adassay</div>
+    <a class="brand" href="/">adassay</a>
     <code>brew install belaytzev/tap/adassay</code>
   </header>
 
   <section class="hero">
-    <h1>An ad blocker for AI agents.</h1>
-    <p>Web pages carry text written to be quoted by machines: affiliate inserts, paid
-       placements dressed as editorial, instructions hidden where only a parser will find
-       them. adassay cuts what the publisher declared, marks what is doubtful, and reports
-       what the page hides from readers.</p>
+    <picture class="logo">
+      <source srcset="/logo-dark.png" media="(prefers-color-scheme: dark)">
+      <img src="/logo.png" alt="" width="192" height="192">
+    </picture>
 
-    <form class="field" id="form">
-      <input type="url" id="url" placeholder="https://example.com/best-laptops-2026" aria-label="Page to read" required>
-      <button class="btn" type="submit" id="submit">Read it</button>
-    </form>
+    <div class="hero__copy">
+      <h1>An ad blocker for AI agents.</h1>
+      <p>Web pages carry text written to be quoted by machines: affiliate inserts, paid
+         placements dressed as editorial, instructions hidden where only a parser will find
+         them. adassay cuts what the publisher declared, marks what is doubtful, and reports
+         what the page hides from readers.</p>
 
-    <div class="chips">
-      <span>or open a saved one:</span>
-      <button class="chip" type="button" data-case="keyboards" aria-pressed="true">keyboard roundup</button>
-      <button class="chip" type="button" data-case="injection" aria-pressed="false">hidden instruction</button>
+      <form class="field" id="form">
+        <input type="url" id="url" placeholder="https://example.com/best-laptops-2026" aria-label="Page to read" required>
+        <button class="btn" type="submit" id="submit">Read it</button>
+      </form>
+
+      <div class="chips">
+        <span>or open a saved one:</span>
+        <button class="chip" type="button" data-case="keyboards" aria-pressed="true">keyboard roundup</button>
+        <button class="chip" type="button" data-case="injection" aria-pressed="false">hidden instruction</button>
+      </div>
     </div>
   </section>
 
