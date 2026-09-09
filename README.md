@@ -328,9 +328,13 @@ a per-address limit does not bound how many addresses there are.
 To host it:
 
 ```sh
-docker build -f Dockerfile.web -t adassay-web .
+docker build --platform linux/amd64 -f Dockerfile.web -t adassay-web .
 kubectl apply -f deploy/k8s/web-deployment.yaml -f deploy/k8s/web-service.yaml -f deploy/k8s/web-ingress.yaml
 ```
+
+Name the platform when the build host and the cluster differ: an image built on an Apple
+Silicon machine without it runs nowhere on x86 nodes, and fails with `exec format error`
+rather than at build time.
 
 It is a separate image from the server's on purpose. The demo changes often — page copy, styles,
 cases — while the server holds the verdict database and should be redeployed rarely and
