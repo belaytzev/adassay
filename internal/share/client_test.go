@@ -93,7 +93,7 @@ func TestClientIDRefusesToBeEphemeral(t *testing.T) {
 	if id != "" {
 		t.Errorf("client id = %q, want none", id)
 	}
-	if err := New("http://127.0.0.1:1").Submit([]core.SubmitEntry{{Hash: strings.Repeat("a", 64), Verdict: core.Drop, Source: core.SourceRules}}); err == nil {
+	if _, err := New("http://127.0.0.1:1").Submit([]core.SubmitEntry{{Hash: strings.Repeat("a", 64), Verdict: core.Drop, Source: core.SourceRules}}); err == nil {
 		t.Error("want the submission refused without a stored id")
 	}
 }
