@@ -65,6 +65,7 @@ the skill changes.
 ### 💻 Install it yourself
 
 ```sh
+brew tap belaytzev/tap
 brew install belaytzev/tap/adassay        # macOS and Linux, amd64 and arm64
 adassay https://example.com/best-laptops-2026
 ```
