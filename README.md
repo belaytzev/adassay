@@ -1,6 +1,6 @@
 # adassay
 
-An ad blocker for AI agents.
+**An ad blocker for AI agents.**
 
 [![Release](https://img.shields.io/github/v/release/belaytzev/adassay?label=release)](https://github.com/belaytzev/adassay/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -14,9 +14,71 @@ parser will find them. An agent reading such a page swallows all of it as fact.
 adassay sits between the page and the agent. It cuts what the publisher itself marked as
 commercial, flags what is doubtful, and reports text the page hides from human readers.
 
+**[Quick start](#quick-start)** ·
+[What it does](#what-it-actually-does) ·
+[Use it](#use-it) ·
+[How it decides](#how-it-decides) ·
+[Privacy](#privacy) ·
+[Known limits](#known-limits) ·
+[Going deeper](#going-deeper) ·
+[Contributing](#contributing) ·
+[Licence](#licence)
+
+## Quick start
+
 ```sh
+brew install belaytzev/tap/adassay        # macOS and Linux, amd64 and arm64
 adassay https://example.com/best-laptops-2026
 ```
+
+With Go 1.25 or newer, `go install adassay.com/cmd/adassay@latest` does the same. Archives for
+every platform are on the [releases page](https://github.com/belaytzev/adassay/releases/latest),
+and the source builds with `go build ./cmd/adassay`.
+
+No install at all: paste a URL at **[adassay.com](https://adassay.com)** and see every paragraph
+marked kept, cut or queried, with the reasons in the margin.
+
+### What comes out
+
+A six-paragraph keyboard roundup goes in. This is what an agent gets back:
+
+```markdown
+Switch choice matters more than the board. Tactile switches suit people who type
+all day and hate bottoming out; linears suit people who share an office …
+
+[[adassay:flag {"id":"s2","score":0.5,"reasons":["disclaimer"]}]]
+We earn commission from purchases made through the links in this article.
+[[/adassay:flag]]
+
+[[adassay:flag {"id":"s3","score":0.27,"reasons":["affiliate_link"]}]]
+The Keychron Q1 is the safe recommendation: a gasket mount, a solid aluminium
+case, and QMK firmware that will outlive the plastic.
+[[/adassay:flag]]
+
+Split boards look like an affectation until a wrist starts hurting …
+
+Hot swap sockets are the feature to insist on …
+```
+
+Six paragraphs in: three passed untouched, two stayed with a marker saying why they are
+doubtful, and the one that read *"Use code TYPE20 at checkout for twenty percent off"* is gone.
+Nothing doubtful is removed silently — it stays, marked, and the agent decides.
+
+### Give it to an agent
+
+`adassay-mcp` is an MCP server over stdio with two tools: `fetch_clean(url)` downloads a page
+and returns it filtered; `check_text(text)` judges text you already have, without touching the
+network.
+
+```json
+{
+  "mcpServers": {
+    "adassay": { "command": "adassay-mcp" }
+  }
+}
+```
+
+Point the agent at `fetch_clean` instead of a plain fetch tool. That is the whole integration.
 
 ## What it actually does
 
@@ -38,7 +100,7 @@ recommendation, and the rule layer currently catches none of it. A local model c
 grey zone if you enable one, and it helps — but this is an open problem, not a solved one.
 If that class is what you need, this tool is not there yet.
 
-## How it compares
+### How it compares
 
 | | What it removes | What it misses |
 |---|---|---|
@@ -46,29 +108,6 @@ If that class is what you need, this tool is not there yet.
 | uBlock Origin, EasyList | requests and DOM nodes by URL and selector | text; they never see it |
 | Prompt-injection guardrails | instructions aimed at the model | ordinary marketing prose |
 | **adassay** | declared advertising inside the article, plus hidden text | undeclared native advertising |
-
-## Install
-
-```sh
-brew install belaytzev/tap/adassay    # adassay and adassay-mcp, macOS and Linux
-```
-
-Binaries are published to [github.com/belaytzev/adassay/releases](https://github.com/belaytzev/adassay/releases)
-for darwin and linux, amd64 and arm64; the cask picks the right one.
-
-With Go 1.25 or newer:
-
-```sh
-go install adassay.com/cmd/adassay@latest
-go install adassay.com/cmd/adassay-mcp@latest   # MCP server, optional
-```
-
-From source:
-
-```sh
-git clone https://github.com/belaytzev/adassay
-cd adassay && go build ./cmd/adassay
-```
 
 ## Use it
 
@@ -79,6 +118,7 @@ adassay https://example.com/article           # filtered markdown
 adassay --json https://example.com/article    # full result: segments, scores, findings
 adassay --verbose https://example.com/a       # plus the hidden-text findings
 cat saved.html | adassay                      # from stdin, touches no database
+adassay version
 ```
 
 Flags: `--config` (your own `rules.yaml`), `--db` (local database path), `--no-share` (send
@@ -96,17 +136,8 @@ Exit codes carry meaning, so scripts and CI can act on them:
 
 ### From an AI agent
 
-The MCP server exposes two tools:
-
-- `fetch_clean(url)` — download a page and return it filtered
-- `check_text(text)` — judge text you already have, no network
-
-```sh
-adassay-mcp        # stdio transport; flags: --config, --db
-```
-
-Add it to your agent's MCP configuration and point the agent at `fetch_clean` instead of a
-plain fetch tool.
+See [Give it to an agent](#give-it-to-an-agent) above. `adassay-mcp` takes `--config` and
+`--db`, and `-version` prints its version.
 
 ### Correcting it
 
@@ -120,7 +151,7 @@ adassay vote "exact paragraph text" --ad         # same, hash computed on the sp
 
 An argument that is neither 64 hex characters nor a URL is treated as segment text.
 
-## What you get back
+### What you get back
 
 Every paragraph ends up in one of three states:
 
@@ -227,7 +258,13 @@ Stated plainly, because finding them yourself later is worse.
   time, since a fresh install carries no weight for a day and a misbehaving one loses what it
   earned. A patient attacker can still age installs.
 
-## Configuration
+## Going deeper
+
+Reference material for tuning the rules, running your own instances, and hosting the demo.
+Nothing here is needed to use the tool.
+
+<details>
+<summary><strong>Configuration</strong> — your own <code>rules.yaml</code> on top of the built-in one</summary>
 
 The built-in `internal/config/rules.yaml` is the default. Your file layers **on top**, so list
 only what you change; an unknown key is an error rather than silence. Lists are replaced
@@ -237,7 +274,7 @@ whole, not appended to; `l2.weights` merges per key.
 adassay --config ./my-rules.yaml https://example.com
 ```
 
-### l1 — hidden text
+#### l1 — hidden text
 
 | Key | Meaning |
 |---|---|
@@ -250,7 +287,7 @@ Length alone is not enough for the mechanisms ordinary pages use legitimately �
 `<template>`, `hidden`, `aria-hidden`, long attributes. Those need an imperative or an agent
 name as well, or the detector fires on MediaWiki markup and plain meta descriptions.
 
-### l2 — advertising features
+#### l2 — advertising features
 
 | Key | Meaning |
 |---|---|
@@ -271,7 +308,7 @@ l2:
       verdict: drop
 ```
 
-### l3 — domain reputation
+#### l3 — domain reputation
 
 | Key | Meaning |
 |---|---|
@@ -280,7 +317,10 @@ l2:
 | `finding_penalty` | contribution of one finding to distrust |
 | `max_shift` | largest nudge to a paragraph score (0..1) |
 
-## Tuning against a corpus
+</details>
+
+<details>
+<summary><strong>Tuning against a corpus</strong> — <code>adassay calibrate</code> and the five numbers it reports</summary>
 
 ```sh
 cd testdata/corpus && ./fetch.sh    # once: download the captured pages
@@ -311,7 +351,10 @@ The best configuration is chosen by rule, not by a blended score: reject anythin
 `drop_prec` below 1.000, reject anything flagging more than 15% of a page, then take the
 widest coverage, then the least noise.
 
-## The demo page
+</details>
+
+<details>
+<summary><strong>The demo page</strong> — what runs at adassay.com, and how to host your own</summary>
 
 A proof sheet: paste a URL, or open one of the two saved cases, and see which paragraphs were
 cut, which were queried, and which were left alone, with the reasons in the margin. A toggle
@@ -358,7 +401,10 @@ Run one replica. The rate limiter and the result cache both live in the process,
 doubles the allowance and halves the cache hit rate. The image is stateless and needs no
 volume; a Deployment with a readiness probe on `/healthz` is the whole manifest.
 
-## Running the shared database
+</details>
+
+<details>
+<summary><strong>Running the shared database</strong> — the AGPL server, its endpoints, quorum and limits</summary>
 
 ```sh
 docker build -t adassay-server .
@@ -404,7 +450,10 @@ instead of switching itself off.
 Publish it through a tunnel rather than a port forward, and list the tunnel's addresses in
 `ADASSAY_TRUSTED_PROXIES` — only then is the forwarded client IP header believed.
 
-## Seeding the database
+</details>
+
+<details>
+<summary><strong>Seeding the database</strong> — filling a fresh instance from your own hosts</summary>
 
 A fresh database serves nothing: quorum needs several independent installs to agree, and
 until they do, every client falls back to computing verdicts locally. `adassay seed` fills it
@@ -430,6 +479,8 @@ install is ordinary — a human vote still overrides its verdict once the vote r
 homelab repository runs the same binary as a CronJob. Spread the hosts across locations:
 publishers rate-limit by address, and a single IP walking thirty publishers every six hours
 is the pattern they block.
+
+</details>
 
 ## Contributing
 
