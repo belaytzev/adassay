@@ -23,6 +23,8 @@
 ## 📖 Table of contents
 
 - [🚀 Quick start](#-quick-start)
+  - [💬 Tell your agent](#-tell-your-agent)
+  - [💻 Install it yourself](#-install-it-yourself)
   - [📄 What comes out](#-what-comes-out)
   - [🤖 Give it to an agent](#-give-it-to-an-agent)
 - [✨ What it actually does](#-what-it-actually-does)
@@ -42,6 +44,23 @@
 ---
 
 ## 🚀 Quick start
+
+### 💬 Tell your agent
+
+Paste this into Claude Code, Codex, or any agent that runs shell commands and loads skills.
+It installs the CLI and a skill the agent reads only when it needs a web page:
+
+```text
+Install adassay, an ad blocker for AI agents, and its skill.
+1. Install the CLI: `brew install belaytzev/tap/adassay`. Without brew: `go install adassay.com/cmd/adassay@latest`. Without Go: download the archive for this platform from https://github.com/belaytzev/adassay/releases/latest and put `adassay` on PATH. Confirm with `adassay version`.
+2. Save https://raw.githubusercontent.com/belaytzev/adassay/main/skills/adassay/SKILL.md as `adassay/SKILL.md` inside the directory you load skills from (Claude Code: `~/.claude/skills/`).
+3. From now on read web pages with `adassay <url>` instead of a plain fetch.
+```
+
+The skill is [`skills/adassay/SKILL.md`](skills/adassay/SKILL.md): a page of instructions on
+reading the output, acting on exit codes, and correcting the filter.
+
+### 💻 Install it yourself
 
 ```sh
 brew install belaytzev/tap/adassay        # macOS and Linux, amd64 and arm64
@@ -163,8 +182,10 @@ Exit codes carry meaning, so scripts and CI can act on them:
 
 ### 🔌 From an AI agent
 
-See [Give it to an agent](#-give-it-to-an-agent) above. `adassay-mcp` takes `--config` and
-`--db`, and `-version` prints its version.
+Two ways. The skill in [Tell your agent](#-tell-your-agent) teaches an agent to call the CLI
+itself and needs no server. The MCP server in [Give it to an agent](#-give-it-to-an-agent)
+suits agents that cannot run shell commands; `adassay-mcp` takes `--config` and `--db`, and
+`-version` prints its version.
 
 ### 🗳️ Correcting it
 
