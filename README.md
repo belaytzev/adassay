@@ -51,17 +51,19 @@ brew install belaytzev/tap/adassay    # adassay and adassay-mcp, macOS and Linux
 Binaries are published to [github.com/belaytzev/adassay/releases](https://github.com/belaytzev/adassay/releases)
 for darwin and linux, amd64 and arm64; the cask picks the right one.
 
-From source, Go 1.25 or newer:
+With Go 1.25 or newer:
 
 ```sh
-git clone https://git.t1go.net/belaytzev/adassay
-cd adassay
-go build ./cmd/adassay
-go build ./cmd/adassay-mcp   # MCP server, optional
+go install adassay.com/cmd/adassay@latest
+go install adassay.com/cmd/adassay-mcp@latest   # MCP server, optional
 ```
 
-`go install adassay.com/...` will work once the module has a public home; the demo page
-deliberately carries no `go-import` tag pointing at a private host.
+From source:
+
+```sh
+git clone https://github.com/belaytzev/adassay
+cd adassay && go build ./cmd/adassay
+```
 
 ## Use it
 
@@ -334,7 +336,7 @@ To host it:
 
 ```sh
 docker build --platform linux/amd64 -f Dockerfile.web -t adassay-web .
-kubectl apply -f deploy/k8s/web-deployment.yaml -f deploy/k8s/web-service.yaml -f deploy/k8s/web-ingress.yaml
+docker run -p 8080:8080 adassay-web
 ```
 
 Name the platform when the build host and the cluster differ: an image built on an Apple
@@ -348,14 +350,19 @@ database. Both binaries link sqlite either way, since the pipeline depends on th
 splitting them saves about a megabyte and that is not the reason for it.
 
 Run one replica. The rate limiter and the result cache both live in the process, so a second pod
-doubles the allowance and halves the cache hit rate.
+doubles the allowance and halves the cache hit rate. The image is stateless and needs no
+volume; a Deployment with a readiness probe on `/healthz` is the whole manifest.
 
 ## Running the shared database
 
 ```sh
 docker build -t adassay-server .
-kubectl apply -f deploy/k8s/deployment.yaml -f deploy/k8s/service.yaml -f deploy/k8s/ingress.yaml -f deploy/k8s/pvc.yaml
+docker run -p 8080:8080 -v adassay-data:/data adassay-server
 ```
+
+The server needs one persistent volume for its database and, in production, a Postgres it can
+reach; the Helm chart that runs the public instance lives with the rest of that cluster's
+configuration, not here.
 
 The server lives in `server/` as a package with `cmd/adassay-server` as a thin main, so it can
 be embedded or tested directly. It is **AGPL-3.0**, unlike the rest of the repository — see

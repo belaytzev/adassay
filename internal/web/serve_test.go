@@ -451,9 +451,10 @@ func TestConcurrentRequestsAreServed(t *testing.T) {
 	}
 }
 
-// The page is public and must not name anything behind it: no source host, no
-// go-import pointing at one. A leak here is a leak to every visitor.
-func TestIndexNamesNoInternalHost(t *testing.T) {
+// The page is public: it carries the go-import tag for the public repository
+// and must not name the private forge or a cluster address. A leak here is a
+// leak to every visitor.
+func TestIndexNamesOnlyThePublicRepository(t *testing.T) {
 	mux := testMux(t, func(string) ([]byte, error) { return corpus(t, "promo_listicle.html"), nil })
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -464,10 +465,15 @@ func TestIndexNamesNoInternalHost(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `<link rel="stylesheet" href="/adassay.css">`) {
-		t.Errorf("index does not link its stylesheet")
+	for _, want := range []string{
+		`<meta name="go-import" content="adassay.com git https://github.com/belaytzev/adassay">`,
+		`<link rel="stylesheet" href="/adassay.css">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("index does not contain %q", want)
+		}
 	}
-	for _, leak := range []string{"t1go.net", "go-import", "go-source", "192.168.", "10.42."} {
+	for _, leak := range []string{"t1go.net", "192.168.", "10.42."} {
 		if strings.Contains(body, leak) {
 			t.Errorf("index contains %q", leak)
 		}
@@ -644,6 +650,31 @@ func TestResponseCarriesTheKeysTheFrontendReads(t *testing.T) {
 
 	hidden := body("inj_hidden_recommend.html", "https://example.com/ssg")
 	has(t, first(t, hidden, "hidden"), "kind", "sample")
+}
+
+// go install adassay.com/cmd/adassay walks the import path and its prefixes,
+// and every one of those probes has to find the go-import tag.
+func TestGoGetProbesFindTheMetaTag(t *testing.T) {
+	mux := testMux(t, func(string) ([]byte, error) { t.Error("fetched on a go-get probe"); return nil, nil })
+
+	for _, path := range []string{"/cmd/adassay", "/cmd/adassay-mcp", "/cmd", "/"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", path+"?go-get=1", nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("GET %s?go-get=1 = %d, want 200", path, w.Code)
+			continue
+		}
+		if !strings.Contains(w.Body.String(), `name="go-import"`) {
+			t.Errorf("GET %s?go-get=1 served a page without the go-import tag", path)
+		}
+	}
+
+	// Without the parameter the same path is still a 404.
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/cmd/adassay", nil))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("GET /cmd/adassay = %d, want 404", w.Code)
+	}
 }
 
 // The byte limit is what keeps the cache from holding a page's worth of memory
