@@ -16,7 +16,8 @@ import (
 	"adassay.com/internal/store"
 )
 
-const version = "0.1.0"
+// Set by the release build: -X main.version={{.Version}}.
+var version = "dev"
 
 type urlArgs struct {
 	URL string `json:"url" jsonschema:"the page to fetch and filter"`

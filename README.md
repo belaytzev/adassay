@@ -44,7 +44,14 @@ If that class is what you need, this tool is not there yet.
 
 ## Install
 
-Go 1.25 or newer.
+```sh
+brew install belaytzev/tap/adassay    # adassay and adassay-mcp, macOS and Linux
+```
+
+Binaries are published to [github.com/belaytzev/adassay/releases](https://github.com/belaytzev/adassay/releases)
+for darwin and linux, amd64 and arm64; the cask picks the right one.
+
+From source, Go 1.25 or newer:
 
 ```sh
 git clone https://git.t1go.net/belaytzev/adassay
