@@ -53,12 +53,14 @@ It installs the CLI and a skill the agent reads only when it needs a web page:
 ```text
 Install adassay, an ad blocker for AI agents, and its skill.
 1. Install the CLI: `brew install belaytzev/tap/adassay`. Without brew: `go install adassay.com/cmd/adassay@latest`. Without Go: download the archive for this platform from https://github.com/belaytzev/adassay/releases/latest and put `adassay` on PATH. Confirm with `adassay version`.
-2. Save https://raw.githubusercontent.com/belaytzev/adassay/main/skills/adassay/SKILL.md as `adassay/SKILL.md` inside the directory you load skills from (Claude Code: `~/.claude/skills/`).
+2. Claude Code: run `claude plugin marketplace add belaytzev/adassay` and then `claude plugin install adassay@adassay`. Any other agent: save https://raw.githubusercontent.com/belaytzev/adassay/main/skills/adassay/SKILL.md as `adassay/SKILL.md` inside the directory you load skills from.
 3. From now on read web pages with `adassay <url>` instead of a plain fetch.
 ```
 
 The skill is [`skills/adassay/SKILL.md`](skills/adassay/SKILL.md): a page of instructions on
-reading the output, acting on exit codes, and correcting the filter.
+reading the output, acting on exit codes, and correcting the filter. This repository is also a
+Claude Code plugin marketplace, so the installed plugin follows `main` and updates itself when
+the skill changes.
 
 ### 💻 Install it yourself
 

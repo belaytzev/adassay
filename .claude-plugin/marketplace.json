@@ -1,0 +1,14 @@
+{
+  "name": "adassay",
+  "description": "An ad blocker for AI agents: the adassay skill, tracking this repository.",
+  "owner": {
+    "name": "Alexey Belaytzev"
+  },
+  "plugins": [
+    {
+      "name": "adassay",
+      "source": "./",
+      "description": "Read web pages through the adassay CLI: declared advertising cut, doubtful paragraphs marked, hidden text reported."
+    }
+  ]
+}
