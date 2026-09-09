@@ -28,12 +28,10 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# The commit log names hashes on a private forge and is not a public
+# changelog. Notes are written by hand: goreleaser release --release-notes FILE
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
+  disable: true
 
 # The source lives on a private forge; releases go to a public GitHub repo
 # that holds nothing but them, so brew can download without credentials.
