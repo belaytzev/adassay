@@ -68,7 +68,9 @@ a { color: var(--blue); text-underline-offset: 0.15em; }
   gap: 1rem; padding: 1.25rem 0; border-bottom: 1px solid var(--rule);
 }
 .brand { color: var(--text); text-decoration: none; font: 500 1.05rem/1 var(--mach); }
-.masthead code { font-size: 0.8rem; color: var(--overlay); }
+.links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; font-size: 0.85rem; }
+.links a { color: var(--overlay); text-decoration: none; }
+.links a:hover, .links a:focus-visible { color: var(--text); text-decoration: underline; }
 
 /* ── hero ─────────────────────────────────────────────── */
 
