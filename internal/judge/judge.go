@@ -2,12 +2,15 @@ package judge
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"syscall"
 
 	"adassay.com/internal/config"
 	"adassay.com/internal/core"
@@ -92,8 +95,12 @@ func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdic
 		batch := segs[start:min(start+size, len(segs))]
 		got, err := j.ask(topic, batch)
 		if err != nil {
-
-			j.log().Warn("judge unavailable, grey zone left as is", "err", err, "segments", len(segs)-start)
+			level := slog.LevelWarn
+			// Nothing listening on the default local endpoint is the usual state, not a fault.
+			if errors.Is(err, syscall.ECONNREFUSED) {
+				level = slog.LevelDebug
+			}
+			j.log().Log(context.Background(), level, "judge unavailable, grey zone left as is", "err", err, "segments", len(segs)-start)
 			break
 		}
 

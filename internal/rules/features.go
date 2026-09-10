@@ -16,7 +16,7 @@ func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 		config.FeatureRelSponsored: core.Sponsored(seg.Links),
 		config.FeaturePromoCode:    promoCode(seg.Text, p.PromoWords),
 		config.FeatureAffiliate:    affiliate(seg.Links, p),
-		config.FeatureDisclaimer:   matchesAny(seg.Text, p.Disclaimers),
+		config.FeatureDisclaimer:   matchesAny(seg.Text, p.Disclaimers) && !label(seg.Text, p.Disclaimers) && !menu(seg),
 		config.FeatureCTAUrgency:   matchesAny(seg.Text, p.CTAWords) && matchesAny(seg.Text, p.UrgencyWords),
 	}
 	fired[config.FeatureBrandDensity] = corroborated(fired) && brandDensity(seg.Text, doc)
@@ -149,6 +149,29 @@ func affiliate(links []core.Link, p config.Patterns) bool {
 		}
 	}
 	return false
+}
+
+// A segment that is nothing but the marker is a slot label or a menu entry;
+// the disclosure worth acting on sits in prose.
+func label(text string, patterns []string) bool {
+	bare := strings.TrimFunc(text, func(r rune) bool { return !isWord(r) })
+	for _, p := range patterns {
+		if strings.EqualFold(bare, strings.TrimFunc(p, func(r rune) bool { return !isWord(r) })) {
+			return true
+		}
+	}
+	return false
+}
+
+const menuShare = 0.7
+
+func menu(seg core.Segment) bool {
+	linked := 0
+	for _, l := range seg.Links {
+		linked += len([]rune(l.Text))
+	}
+	total := len([]rune(seg.Text))
+	return total > 0 && float64(linked) >= menuShare*float64(total)
 }
 
 func matchesAny(text string, patterns []string) bool {

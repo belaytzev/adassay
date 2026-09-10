@@ -62,17 +62,23 @@ func Extract(page []byte, pageURL string, cfg config.L1) (core.Result, error) {
 		Hidden:   raw.findings,
 		Domain:   NormalizeDomain(pageURL),
 		Visible:  raw.visible,
-		Thin:     thin(text, raw.visible),
+		Thin:     thin(page, text, raw.visible),
 	}, nil
 }
 
 const (
 	minVisible = 500
 	thinFactor = 4
+	shellBytes = 4096
 )
 
-func thin(text string, visible int) bool {
-	return visible >= minVisible && thinFactor*len([]rune(text)) < visible
+// Kilobytes of markup showing almost no text is a JavaScript shell, however
+// faithfully the little it shows was extracted.
+func thin(page []byte, text string, visible int) bool {
+	if visible < minVisible {
+		return len(page) >= shellBytes
+	}
+	return thinFactor*len([]rune(text)) < visible
 }
 
 type block struct {
