@@ -110,6 +110,18 @@ func openStore(dsn string) (*Store, error) {
 			return nil, fmt.Errorf("server: migrate seeder: %w", err)
 		}
 	}
+
+	var hasRefuted int
+	if err := st.conn().QueryRow(d.hasColumn("confirmations", "refuted")).Scan(&hasRefuted); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("server: inspect confirmations: %w", err)
+	}
+	if hasRefuted == 0 {
+		if _, err := db.Exec(`ALTER TABLE confirmations ADD COLUMN refuted INTEGER NOT NULL DEFAULT 0`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("server: migrate refuted: %w", err)
+		}
+	}
 	return st, nil
 }
 
@@ -335,7 +347,8 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 	}
 
 	// Reputation moves once per install and hash: siding with a verdict that
-	// reached quorum without this install upholds it, contradicting one refutes it.
+	// reached quorum without this install upholds it, contradicting one refutes
+	// it, and a confirmation is refuted at most once however the row flips.
 	var known int
 	if err := btx.QueryRow(
 		`SELECT COUNT(*) FROM confirmations WHERE hash = ? AND norm_version = ? AND client_id = ?`,
@@ -350,14 +363,14 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 		}
 		uphold = others >= s.quorum
 	}
-	if known == 0 && refused {
-		if _, err := btx.Exec(`UPDATE installs SET refuted = refuted + 1 WHERE client_id = ?`, clientID); err != nil {
-			return false, 0, fmt.Errorf("server: submit: %w", err)
-		}
-	}
 
 	if err := confirm(btx, e.Hash, normVersion, clientID, e.Verdict.String(), e.Source); err != nil {
 		return false, 0, err
+	}
+	if known == 0 && refused {
+		if err := refute(btx, e.Hash, normVersion, "client_id", clientID); err != nil {
+			return false, 0, err
+		}
 	}
 	if refused {
 		if err := tx.Commit(); err != nil {
@@ -391,11 +404,8 @@ func (s *Store) submit(e core.SubmitEntry, normVersion int, clientID string, see
 		return true, curVotes, nil
 	}
 	if challenger {
-		if _, err := btx.Exec(
-			`UPDATE installs SET refuted = refuted + 1 WHERE client_id IN
-			 (SELECT client_id FROM confirmations WHERE hash = ? AND norm_version = ? AND verdict = ?)`,
-			e.Hash, normVersion, curVerdict); err != nil {
-			return false, 0, fmt.Errorf("server: submit: %w", err)
+		if err := refute(btx, e.Hash, normVersion, "verdict", curVerdict); err != nil {
+			return false, 0, err
 		}
 	}
 	row.Votes = n

@@ -81,6 +81,25 @@ func TestOverturnedVerdictRefutesItsBackers(t *testing.T) {
 			t.Errorf("client %d refuted = %d, want 0 for the side that won", c, ref)
 		}
 	}
+
+	// Give both camps enough weight to keep flipping the row; a confirmation
+	// still counts against its install only once.
+	for _, c := range []int{1, 2, 3, 4} {
+		if _, err := st.conn().Exec(`UPDATE installs SET upheld = ? WHERE client_id = ?`, installMaxWeit, client(c)); err != nil {
+			t.Fatalf("upheld: %v", err)
+		}
+	}
+	submitAs(t, mux, client(1), "", "", drop)
+	submitAs(t, mux, client(3), "", "", keep)
+	submitAs(t, mux, client(1), "", "", drop)
+	if got := stored(t, st, hash); got.Verdict != core.Drop {
+		t.Fatalf("verdict = %v, want the row to have flipped again", got.Verdict)
+	}
+	for _, c := range []int{1, 2, 3, 4} {
+		if _, ref := reputation(t, st, client(c)); ref != 1 {
+			t.Errorf("client %d refuted = %d after three flips, want 1: one confirmation, one refutation", c, ref)
+		}
+	}
 }
 
 func TestContradictingASettledVerdictRefutesTheInstall(t *testing.T) {
