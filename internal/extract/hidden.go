@@ -148,30 +148,66 @@ func transparent(v string) bool {
 	// Three channels, then alpha after a slash or as the fourth comma-separated
 	// legacy component. Anything else is invalid CSS and renders opaque.
 	if channels, alpha, ok := strings.Cut(args, "/"); ok {
-		return numbers(strings.Fields(channels), 3) && numbers(strings.Fields(alpha), 1) && zero(strings.TrimSpace(alpha))
+		channels, relative := origin(channels)
+		return channels != "" && numbers(strings.Fields(channels), 3, relative) && zero(alpha)
 	}
-	if parts := strings.Split(args, ","); legacy && numbers(parts, 4) {
-		return zero(strings.TrimSpace(parts[3]))
+	if parts := strings.Split(args, ","); legacy && numbers(parts, 4, false) {
+		return zero(parts[3])
 	}
 	return false
 }
 
-func numbers(toks []string, n int) bool {
+// Strips the "from <origin>" of relative colour syntax, reporting whether it
+// was there; the origin is one token, or a function up to its parenthesis.
+func origin(channels string) (string, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimLeft(channels, " "), "from ")
+	if !ok {
+		return channels, false
+	}
+	end := strings.IndexAny(rest, " (")
+	if end < 0 {
+		return "", true
+	}
+	if rest[end] == '(' {
+		if end = strings.IndexByte(rest, ')'); end < 0 {
+			return "", true
+		}
+	}
+	return rest[end+1:], true
+}
+
+// A channel is a number, a percentage, an angle or none; in relative syntax
+// it may also be a channel keyword.
+func numbers(toks []string, n int, relative bool) bool {
 	if len(toks) != n {
 		return false
 	}
 	for _, t := range toks {
-		if t = strings.TrimSpace(t); t != "none" {
-			if _, ok := length(t); !ok {
-				return false
-			}
+		t = strings.TrimSpace(t)
+		if t == "none" || (relative && isWord(t)) {
+			continue
+		}
+		for _, unit := range []string{"%", "deg", "grad", "rad", "turn"} {
+			t = strings.TrimSuffix(t, unit)
+		}
+		if _, err := strconv.ParseFloat(t, 64); err != nil {
+			return false
 		}
 	}
 	return true
 }
 
+func isWord(t string) bool {
+	for i := 0; i < len(t); i++ {
+		if c := t[i]; c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return t != ""
+}
+
 func zero(tok string) bool {
-	f, err := strconv.ParseFloat(strings.TrimSuffix(tok, "%"), 64)
+	f, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(tok), "%"), 64)
 	return err == nil && f == 0
 }
 
@@ -284,8 +320,9 @@ func parseStyle(s string) map[string]string {
 }
 
 // Splits a style attribute the way the CSS tokenizer would: a comment is a
-// space, a string or an unquoted url() token is opaque, a backslash binds the
-// next byte, and only a ';' outside every bracket ends a declaration.
+// space, a string is opaque until its quote or a newline, an unquoted url()
+// token is opaque until its parenthesis, an escape binds what it escapes,
+// and only a ';' outside every block ends a declaration.
 func declarations(s string) []string {
 	var out []string
 	var b strings.Builder
@@ -293,9 +330,6 @@ func declarations(s string) []string {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
-		case c == '\\' && i+1 < len(s):
-			b.WriteString(s[i : i+2])
-			i++
 		case c == '"' || c == '\'':
 			end := opaque(s, i+1, c)
 			b.WriteString(s[i:end])
@@ -308,14 +342,17 @@ func declarations(s string) []string {
 				i += 2 + end + 1
 			}
 			b.WriteByte(' ')
-		case c == '(' && urlToken(s, i):
-			end := opaque(s, i+1, ')')
+		case identStart(s, i):
+			name, end := ident(s, i)
+			if name == "url" && end < len(s) && s[end] == '(' && !quoted(s[end+1:]) {
+				end = opaque(s, end+1, ')')
+			}
 			b.WriteString(s[i:end])
 			i = end - 1
-		case c == '(':
+		case c == '(' || c == '[' || c == '{':
 			depth++
 			b.WriteByte(c)
-		case c == ')':
+		case c == ')' || c == ']' || c == '}':
 			depth = max(depth-1, 0)
 			b.WriteByte(c)
 		case c == ';' && depth == 0:
@@ -328,8 +365,8 @@ func declarations(s string) []string {
 	return append(out, b.String())
 }
 
-// Index one past the closing delimiter, honouring backslash escapes; the end
-// of the input closes an unterminated token.
+// Index one past the closing delimiter, honouring escapes. A newline ends a
+// string without being consumed; the end of the input closes anything.
 func opaque(s string, from int, close byte) int {
 	for i := from; i < len(s); i++ {
 		switch s[i] {
@@ -337,24 +374,76 @@ func opaque(s string, from int, close byte) int {
 			i++
 		case close:
 			return i + 1
+		case '\n', '\r', '\f':
+			if close != ')' {
+				return i
+			}
 		}
 	}
 	return len(s)
 }
 
-// The '(' at i opens a url token only when the identifier before it is
-// exactly "url" and what follows is not a quote.
-func urlToken(s string, i int) bool {
-	if i < 3 || !strings.EqualFold(s[i-3:i], "url") || (i > 3 && identByte(s[i-4])) {
+func quoted(s string) bool {
+	s = strings.TrimLeft(s, " \t\n\r\f")
+	return s != "" && (s[0] == '"' || s[0] == '\'')
+}
+
+func identStart(s string, i int) bool {
+	c := s[i]
+	if i > 0 && identByte(s[i-1]) {
 		return false
 	}
-	rest := strings.TrimLeft(s[i+1:], " \t\n\r\f")
-	return rest == "" || (rest[0] != '"' && rest[0] != '\'')
+	if c == '-' {
+		return i+1 < len(s) && (s[i+1] == '-' || nameStart(s[i+1]))
+	}
+	return nameStart(c)
+}
+
+func nameStart(c byte) bool {
+	return c == '_' || c == '\\' || c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 func identByte(c byte) bool {
-	return c == '-' || c == '_' || c == '\\' || c >= 0x80 ||
-		(c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+	return c == '-' || (c >= '0' && c <= '9') || nameStart(c)
+}
+
+// The identifier at i, lower-cased with its escapes decoded, and the index
+// past it. An escape is up to six hex digits plus one optional space, or
+// any other single byte.
+func ident(s string, i int) (string, int) {
+	var name strings.Builder
+	for i < len(s) {
+		c := s[i]
+		switch {
+		case c == '\\' && i+1 < len(s):
+			j := i + 1
+			for j < len(s) && j < i+7 && isHex(s[j]) {
+				j++
+			}
+			if j > i+1 {
+				if code, err := strconv.ParseUint(s[i+1:j], 16, 32); err == nil {
+					name.WriteRune(rune(code))
+				}
+				if j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n') {
+					j++
+				}
+			} else {
+				name.WriteByte(s[j])
+				j++
+			}
+			i = j
+		case identByte(c):
+			name.WriteByte(c)
+			i++
+		default:
+			return strings.ToLower(name.String()), i
+		}
+	}
+	return strings.ToLower(name.String()), i
+}
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 func isZero(v string) bool {
