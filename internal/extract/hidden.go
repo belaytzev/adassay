@@ -137,20 +137,42 @@ func transparent(v string) bool {
 	if !ok {
 		return false
 	}
+	legacy := false
 	switch fn {
-	case "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch":
+	case "rgb", "rgba", "hsl", "hsla":
+		legacy = true
+	case "hwb", "lab", "lch", "oklab", "oklch":
 	default:
 		return false
 	}
-	// Alpha follows a slash, or is the fourth comma-separated legacy component;
-	// a fourth space-separated value is invalid CSS and renders opaque.
-	if _, alpha, ok := strings.Cut(args, "/"); ok {
-		return isZeroLength(alpha)
+	// Three channels, then alpha after a slash or as the fourth comma-separated
+	// legacy component. Anything else is invalid CSS and renders opaque.
+	if channels, alpha, ok := strings.Cut(args, "/"); ok {
+		return numbers(strings.Fields(channels), 3) && numbers(strings.Fields(alpha), 1) && zero(strings.TrimSpace(alpha))
 	}
-	if parts := strings.Split(args, ","); len(parts) == 4 {
-		return isZeroLength(parts[3])
+	if parts := strings.Split(args, ","); legacy && numbers(parts, 4) {
+		return zero(strings.TrimSpace(parts[3]))
 	}
 	return false
+}
+
+func numbers(toks []string, n int) bool {
+	if len(toks) != n {
+		return false
+	}
+	for _, t := range toks {
+		if t = strings.TrimSpace(t); t != "none" {
+			if _, ok := length(t); !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func zero(tok string) bool {
+	f, err := strconv.ParseFloat(strings.TrimSuffix(tok, "%"), 64)
+	return err == nil && f == 0
 }
 
 // rect(top, right, bottom, left) shows nothing once right <= left or bottom <= top.
@@ -247,7 +269,7 @@ func parseStyle(s string) map[string]string {
 		return nil
 	}
 	st := map[string]string{}
-	for _, decl := range strings.Split(stripComments(s), ";") {
+	for _, decl := range declarations(s) {
 		prop, val, ok := strings.Cut(decl, ":")
 		if !ok {
 			continue
@@ -261,48 +283,78 @@ func parseStyle(s string) map[string]string {
 	return st
 }
 
-// A comment separates tokens the way whitespace does, so it becomes a space.
-// Quoted strings and unquoted url() tokens are copied through: a delimiter
-// inside one is not a comment.
-func stripComments(s string) string {
-	if !strings.Contains(s, "/*") {
-		return s
-	}
+// Splits a style attribute the way the CSS tokenizer would: a comment is a
+// space, a string or an unquoted url() token is opaque, a backslash binds the
+// next byte, and only a ';' outside every bracket ends a declaration.
+func declarations(s string) []string {
+	var out []string
 	var b strings.Builder
-	b.Grow(len(s))
-	var quote byte
+	depth := 0
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
-		case quote != 0:
-			if c == '\\' && i+1 < len(s) {
-				b.WriteByte(c)
-				i++
-				c = s[i]
-			} else if c == quote {
-				quote = 0
-			}
+		case c == '\\' && i+1 < len(s):
+			b.WriteString(s[i : i+2])
+			i++
 		case c == '"' || c == '\'':
-			quote = c
-		case len(s)-i > 4 && strings.EqualFold(s[i:i+4], "url(") && s[i+4] != '"' && s[i+4] != '\'':
-			end := strings.IndexByte(s[i:], ')')
-			if end < 0 {
-				end = len(s) - i
-			}
-			b.WriteString(s[i : i+end])
-			i += end - 1
-			continue
+			end := opaque(s, i+1, c)
+			b.WriteString(s[i:end])
+			i = end - 1
 		case c == '/' && i+1 < len(s) && s[i+1] == '*':
 			end := strings.Index(s[i+2:], "*/")
 			if end < 0 {
-				return b.String()
+				i = len(s)
+			} else {
+				i += 2 + end + 1
 			}
-			i += 2 + end + 1
-			c = ' '
+			b.WriteByte(' ')
+		case c == '(' && urlToken(s, i):
+			end := opaque(s, i+1, ')')
+			b.WriteString(s[i:end])
+			i = end - 1
+		case c == '(':
+			depth++
+			b.WriteByte(c)
+		case c == ')':
+			depth = max(depth-1, 0)
+			b.WriteByte(c)
+		case c == ';' && depth == 0:
+			out = append(out, b.String())
+			b.Reset()
+		default:
+			b.WriteByte(c)
 		}
-		b.WriteByte(c)
 	}
-	return b.String()
+	return append(out, b.String())
+}
+
+// Index one past the closing delimiter, honouring backslash escapes; the end
+// of the input closes an unterminated token.
+func opaque(s string, from int, close byte) int {
+	for i := from; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case close:
+			return i + 1
+		}
+	}
+	return len(s)
+}
+
+// The '(' at i opens a url token only when the identifier before it is
+// exactly "url" and what follows is not a quote.
+func urlToken(s string, i int) bool {
+	if i < 3 || !strings.EqualFold(s[i-3:i], "url") || (i > 3 && identByte(s[i-4])) {
+		return false
+	}
+	rest := strings.TrimLeft(s[i+1:], " \t\n\r\f")
+	return rest == "" || (rest[0] != '"' && rest[0] != '\'')
+}
+
+func identByte(c byte) bool {
+	return c == '-' || c == '_' || c == '\\' || c >= 0x80 ||
+		(c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 func isZero(v string) bool {
