@@ -149,22 +149,23 @@ func transparent(v string) bool {
 	// legacy component. Anything else is invalid CSS and renders opaque.
 	// ponytail: absolute colours only, relative from-syntax needs a colour grammar
 	if channels, alpha, ok := strings.Cut(args, "/"); ok {
-		return numbers(strings.Fields(channels), 3) && zero(alpha)
+		return numbers(strings.Fields(channels), 3, true) && zero(alpha, true)
 	}
-	if parts := strings.Split(args, ","); legacy && numbers(parts, 4) {
-		return zero(parts[3])
+	if parts := strings.Split(args, ","); legacy && numbers(parts, 4, false) {
+		return zero(parts[3], false)
 	}
 	return false
 }
 
-// A channel is a number, a percentage, an angle or none.
-func numbers(toks []string, n int) bool {
+// A channel is a number, a percentage or an angle; the space-separated
+// syntax also takes none, which the legacy comma grammar has no place for.
+func numbers(toks []string, n int, modern bool) bool {
 	if len(toks) != n {
 		return false
 	}
 	for _, t := range toks {
 		t = strings.TrimSpace(t)
-		if t == "none" {
+		if modern && t == "none" {
 			continue
 		}
 		for _, unit := range []string{"%", "deg", "grad", "rad", "turn"} {
@@ -178,10 +179,10 @@ func numbers(toks []string, n int) bool {
 }
 
 // A missing alpha renders as zero.
-func zero(tok string) bool {
+func zero(tok string, modern bool) bool {
 	tok = strings.TrimSpace(tok)
 	if tok == "none" {
-		return true
+		return modern
 	}
 	f, err := strconv.ParseFloat(strings.TrimSuffix(tok, "%"), 64)
 	return err == nil && f == 0
@@ -290,7 +291,9 @@ func parseStyle(s string) map[string]string {
 		if i := strings.IndexByte(val, '!'); i >= 0 {
 			val = val[:i]
 		}
-		st[strings.ToLower(strings.TrimSpace(unescape(prop)))] = strings.ToLower(strings.Join(strings.Fields(unescape(val)), " "))
+		// Whitespace is collapsed before escapes are decoded: a decoded space is
+		// part of the name, and a backslash before a newline is not an escape.
+		st[strings.ToLower(unescape(strings.TrimSpace(prop)))] = strings.ToLower(unescape(strings.Join(strings.Fields(val), " ")))
 	}
 	return st
 }
@@ -414,20 +417,28 @@ func ident(s string, i int) (string, int) {
 }
 
 // The code point an escape at i denotes and the index past it: up to six
-// hex digits plus one optional whitespace, or any other single byte.
+// hex digits plus one optional whitespace, or any other single byte. A
+// newline cannot be escaped, so the backslash stands for itself there.
 func escape(s string, i int) (rune, int) {
 	j := i + 1
 	for j < len(s) && j < i+7 && isHex(s[j]) {
 		j++
 	}
 	if j == i+1 {
+		if space(s[j]) {
+			return '\\', i + 1
+		}
 		return rune(s[j]), j + 1
 	}
 	code, _ := strconv.ParseUint(s[i+1:j], 16, 32)
-	if j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n') {
+	if j < len(s) && space(s[j]) {
 		j++
 	}
 	return rune(code), j
+}
+
+func space(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'
 }
 
 func unescape(s string) string {
