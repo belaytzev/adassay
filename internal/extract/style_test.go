@@ -43,6 +43,8 @@ func TestStyleKindInvisibleSpellings(t *testing.T) {
 		{"display:\\6e\fone", KindCSSHidden},
 		{"display:\\6e\rone", KindCSSHidden},
 		{"\\64\fisplay:none", KindCSSHidden},
+		{"\\64\r\nisplay:none", KindCSSHidden},
+		{"display:\\6e\r\none", KindCSSHidden},
 		{`display:none;display\ :block`, KindCSSHidden},
 
 		{"color:rgb(0, 0, 0)", ""},
@@ -66,6 +68,9 @@ func TestStyleKindInvisibleSpellings(t *testing.T) {
 		{`width:1\;display:none`, ""},
 		{"display:\\\nnone", ""},
 		{"\\\ndisplay:none", ""},
+		{"display:\\6e  one", ""},
+		{"display:\\6e \tone", ""},
+		{`display:\20none`, ""},
 		{"color:rgba(0, 0, 0, none)", ""},
 		{"color:rgba(none, 0, 0, 0)", ""},
 		{"color:color(display-p3 1 0 0)", ""},

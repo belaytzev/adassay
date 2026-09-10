@@ -291,9 +291,7 @@ func parseStyle(s string) map[string]string {
 		if i := strings.IndexByte(val, '!'); i >= 0 {
 			val = val[:i]
 		}
-		// Whitespace is collapsed before escapes are decoded: a decoded space is
-		// part of the name, and a backslash before a newline is not an escape.
-		st[strings.ToLower(unescape(strings.TrimSpace(prop)))] = strings.ToLower(unescape(strings.Join(strings.Fields(val), " ")))
+		st[strings.ToLower(normalize(prop))] = strings.ToLower(normalize(val))
 	}
 	return st
 }
@@ -410,15 +408,16 @@ func ident(s string, i int) (string, int) {
 		case identByte(s[end]):
 			end++
 		default:
-			return strings.ToLower(unescape(s[i:end])), end
+			return strings.ToLower(normalize(s[i:end])), end
 		}
 	}
-	return strings.ToLower(unescape(s[i:end])), end
+	return strings.ToLower(normalize(s[i:end])), end
 }
 
 // The code point an escape at i denotes and the index past it: up to six
 // hex digits plus one optional whitespace, or any other single byte. A
-// newline cannot be escaped, so the backslash stands for itself there.
+// newline cannot be escaped, so the backslash stands for itself there, and
+// CRLF counts as the one whitespace the browser folds it into.
 func escape(s string, i int) (rune, int) {
 	j := i + 1
 	for j < len(s) && j < i+7 && isHex(s[j]) {
@@ -432,6 +431,9 @@ func escape(s string, i int) (rune, int) {
 	}
 	code, _ := strconv.ParseUint(s[i+1:j], 16, 32)
 	if j < len(s) && space(s[j]) {
+		if s[j] == '\r' && j+1 < len(s) && s[j+1] == '\n' {
+			j++
+		}
 		j++
 	}
 	return rune(code), j
@@ -441,22 +443,47 @@ func space(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'
 }
 
-func unescape(s string) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
+// Decodes escapes and collapses whitespace in one pass, because the two
+// cannot be ordered: an escape swallows the one whitespace that follows it,
+// while a decoded whitespace belongs to the token and is never collapsed or
+// trimmed. Runs of real whitespace become a single space, and leading and
+// trailing runs are dropped.
+func normalize(s string) string {
 	var b strings.Builder
+	b.Grow(len(s))
+	pending := false
 	for i := 0; i < len(s); {
-		if s[i] == '\\' && i+1 < len(s) {
+		switch c := s[i]; {
+		case space(c):
+			pending = b.Len() > 0
+			i++
+		case c == '\\' && i+1 < len(s):
 			r, next := escape(s, i)
+			if r == '\\' && next == i+1 {
+				// Not an escape: the backslash stands alone and the
+				// whitespace after it collapses like any other.
+				writeSpace(&b, &pending)
+				b.WriteByte('\\')
+				i = next
+				continue
+			}
+			writeSpace(&b, &pending)
 			b.WriteRune(r)
 			i = next
-			continue
+		default:
+			writeSpace(&b, &pending)
+			b.WriteByte(c)
+			i++
 		}
-		b.WriteByte(s[i])
-		i++
 	}
 	return b.String()
+}
+
+func writeSpace(b *strings.Builder, pending *bool) {
+	if *pending {
+		b.WriteByte(' ')
+		*pending = false
+	}
 }
 
 func isHex(c byte) bool {
