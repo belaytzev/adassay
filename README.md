@@ -300,8 +300,10 @@ Stated plainly, because finding them yourself later is worse.
 
 - ❌ **Undeclared native advertising is not caught.** The measured coverage of that class by the
   rule layer is zero. It is the main open problem.
-- 🎨 **External CSS is invisible.** L1 reads inline styles and attributes. A class hidden by a
-  linked stylesheet is not detected.
+- 🎨 **Stylesheets are invisible.** L1 reads inline `style` attributes and HTML attributes only. A
+  class hidden by a linked stylesheet or a `<style>` block is not detected, and the inline parser
+  covers the common spellings of hiding, not the whole CSS grammar: relative colour syntax, for
+  one, is not resolved.
 - 🫥 **JavaScript-rendered pages come back nearly empty** and exit 4. No headless browser is
   involved, by choice.
 - 🚫 **Cloudflare challenges win.** Sites behind a JS challenge return exit 3. Honest headers

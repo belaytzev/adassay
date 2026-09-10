@@ -147,44 +147,24 @@ func transparent(v string) bool {
 	}
 	// Three channels, then alpha after a slash or as the fourth comma-separated
 	// legacy component. Anything else is invalid CSS and renders opaque.
+	// ponytail: absolute colours only, relative from-syntax needs a colour grammar
 	if channels, alpha, ok := strings.Cut(args, "/"); ok {
-		channels, relative := origin(channels)
-		return channels != "" && numbers(strings.Fields(channels), 3, relative) && zero(alpha)
+		return numbers(strings.Fields(channels), 3) && zero(alpha)
 	}
-	if parts := strings.Split(args, ","); legacy && numbers(parts, 4, false) {
+	if parts := strings.Split(args, ","); legacy && numbers(parts, 4) {
 		return zero(parts[3])
 	}
 	return false
 }
 
-// Strips the "from <origin>" of relative colour syntax, reporting whether it
-// was there; the origin is one token, or a function up to its parenthesis.
-func origin(channels string) (string, bool) {
-	rest, ok := strings.CutPrefix(strings.TrimLeft(channels, " "), "from ")
-	if !ok {
-		return channels, false
-	}
-	end := strings.IndexAny(rest, " (")
-	if end < 0 {
-		return "", true
-	}
-	if rest[end] == '(' {
-		if end = strings.IndexByte(rest, ')'); end < 0 {
-			return "", true
-		}
-	}
-	return rest[end+1:], true
-}
-
-// A channel is a number, a percentage, an angle or none; in relative syntax
-// it may also be a channel keyword.
-func numbers(toks []string, n int, relative bool) bool {
+// A channel is a number, a percentage, an angle or none.
+func numbers(toks []string, n int) bool {
 	if len(toks) != n {
 		return false
 	}
 	for _, t := range toks {
 		t = strings.TrimSpace(t)
-		if t == "none" || (relative && isWord(t)) {
+		if t == "none" {
 			continue
 		}
 		for _, unit := range []string{"%", "deg", "grad", "rad", "turn"} {
@@ -197,17 +177,13 @@ func numbers(toks []string, n int, relative bool) bool {
 	return true
 }
 
-func isWord(t string) bool {
-	for i := 0; i < len(t); i++ {
-		if c := t[i]; c < 'a' || c > 'z' {
-			return false
-		}
-	}
-	return t != ""
-}
-
+// A missing alpha renders as zero.
 func zero(tok string) bool {
-	f, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(tok), "%"), 64)
+	tok = strings.TrimSpace(tok)
+	if tok == "none" {
+		return true
+	}
+	f, err := strconv.ParseFloat(strings.TrimSuffix(tok, "%"), 64)
 	return err == nil && f == 0
 }
 
@@ -314,7 +290,7 @@ func parseStyle(s string) map[string]string {
 		if i := strings.IndexByte(val, '!'); i >= 0 {
 			val = val[:i]
 		}
-		st[strings.ToLower(strings.TrimSpace(prop))] = strings.ToLower(strings.Join(strings.Fields(val), " "))
+		st[strings.ToLower(strings.TrimSpace(unescape(prop)))] = strings.ToLower(strings.Join(strings.Fields(unescape(val)), " "))
 	}
 	return st
 }
@@ -326,7 +302,7 @@ func parseStyle(s string) map[string]string {
 func declarations(s string) []string {
 	var out []string
 	var b strings.Builder
-	depth := 0
+	var open []byte
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
@@ -349,13 +325,16 @@ func declarations(s string) []string {
 			}
 			b.WriteString(s[i:end])
 			i = end - 1
+		case c == '\\' && i+1 < len(s):
+			b.WriteString(s[i : i+2])
+			i++
 		case c == '(' || c == '[' || c == '{':
-			depth++
+			open = append(open, closer(c))
 			b.WriteByte(c)
-		case c == ')' || c == ']' || c == '}':
-			depth = max(depth-1, 0)
+		case (c == ')' || c == ']' || c == '}') && len(open) > 0 && open[len(open)-1] == c:
+			open = open[:len(open)-1]
 			b.WriteByte(c)
-		case c == ';' && depth == 0:
+		case c == ';' && len(open) == 0:
 			out = append(out, b.String())
 			b.Reset()
 		default:
@@ -363,6 +342,16 @@ func declarations(s string) []string {
 		}
 	}
 	return append(out, b.String())
+}
+
+func closer(c byte) byte {
+	switch c {
+	case '(':
+		return ')'
+	case '[':
+		return ']'
+	}
+	return '}'
 }
 
 // Index one past the closing delimiter, honouring escapes. A newline ends a
@@ -408,38 +397,55 @@ func identByte(c byte) bool {
 }
 
 // The identifier at i, lower-cased with its escapes decoded, and the index
-// past it. An escape is up to six hex digits plus one optional space, or
-// any other single byte.
+// past it.
 func ident(s string, i int) (string, int) {
-	var name strings.Builder
-	for i < len(s) {
-		c := s[i]
+	end := i
+	for end < len(s) {
 		switch {
-		case c == '\\' && i+1 < len(s):
-			j := i + 1
-			for j < len(s) && j < i+7 && isHex(s[j]) {
-				j++
-			}
-			if j > i+1 {
-				if code, err := strconv.ParseUint(s[i+1:j], 16, 32); err == nil {
-					name.WriteRune(rune(code))
-				}
-				if j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n') {
-					j++
-				}
-			} else {
-				name.WriteByte(s[j])
-				j++
-			}
-			i = j
-		case identByte(c):
-			name.WriteByte(c)
-			i++
+		case s[end] == '\\' && end+1 < len(s):
+			_, end = escape(s, end)
+		case identByte(s[end]):
+			end++
 		default:
-			return strings.ToLower(name.String()), i
+			return strings.ToLower(unescape(s[i:end])), end
 		}
 	}
-	return strings.ToLower(name.String()), i
+	return strings.ToLower(unescape(s[i:end])), end
+}
+
+// The code point an escape at i denotes and the index past it: up to six
+// hex digits plus one optional whitespace, or any other single byte.
+func escape(s string, i int) (rune, int) {
+	j := i + 1
+	for j < len(s) && j < i+7 && isHex(s[j]) {
+		j++
+	}
+	if j == i+1 {
+		return rune(s[j]), j + 1
+	}
+	code, _ := strconv.ParseUint(s[i+1:j], 16, 32)
+	if j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n') {
+		j++
+	}
+	return rune(code), j
+}
+
+func unescape(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == '\\' && i+1 < len(s) {
+			r, next := escape(s, i)
+			b.WriteRune(r)
+			i = next
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
 
 func isHex(c byte) bool {
