@@ -218,17 +218,20 @@ func TestThin(t *testing.T) {
 		name    string
 		text    string
 		visible int
+		page    int
 		want    bool
 	}{
-		{"short page kept whole", strings.Repeat("a", 300), 320, false},
-		{"article dominates the page", strings.Repeat("a", 4000), 9000, false},
-		{"js-rendered page yields a stub", strings.Repeat("a", 150), 1086, true},
-		{"article body lost, boilerplate kept", strings.Repeat("a", 719), 5630, true},
-		{"empty page has nothing to lose", "", 100, false},
+		{"short page kept whole", strings.Repeat("a", 300), 320, 1200, false},
+		{"article dominates the page", strings.Repeat("a", 4000), 9000, 30000, false},
+		{"js-rendered page yields a stub", strings.Repeat("a", 150), 1086, 90000, true},
+		{"article body lost, boilerplate kept", strings.Repeat("a", 719), 5630, 20000, true},
+		{"empty page has nothing to lose", "", 100, 400, false},
+		{"script bundle shows six characters", "", 6, 8411, true},
+		{"login wall in a bundle", strings.Repeat("a", 96), 361, 228109, true},
 	}
 	for _, c := range cases {
-		if got := thin(c.text, c.visible); got != c.want {
-			t.Errorf("%s: thin(%d runes, %d visible) = %v, want %v", c.name, len(c.text), c.visible, got, c.want)
+		if got := thin(make([]byte, c.page), c.text, c.visible); got != c.want {
+			t.Errorf("%s: thin(%d bytes, %d runes, %d visible) = %v, want %v", c.name, c.page, len(c.text), c.visible, got, c.want)
 		}
 	}
 }

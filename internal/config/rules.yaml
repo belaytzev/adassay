@@ -1,5 +1,5 @@
 l1:
-  min_length: 40
+  min_length: 120
   long_attr_length: 200
   imperatives:
     - ignore previous

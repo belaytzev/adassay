@@ -74,7 +74,7 @@ func walk(n *html.Node, cfg config.L1, out *[]core.Finding) {
 			return
 		}
 		if kind := classify(n); kind != "" {
-			if s := nodeText(n); significant(s, kind, cfg) {
+			if s := nodeText(n); significant(s, kind, cfg) && !navigation(n) {
 				*out = append(*out, core.Finding{Kind: kind, Sample: sample(s)})
 				return
 			}
@@ -84,6 +84,27 @@ func walk(n *html.Node, cfg config.L1, out *[]core.Finding) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		walk(c, cfg, out)
 	}
+}
+
+const menuShare = 0.6
+
+// A hidden block that is mostly links is a collapsed menu, not a message to
+// a parser.
+func navigation(n *html.Node) bool {
+	linked := 0
+	var rec func(*html.Node)
+	rec = func(p *html.Node) {
+		for c := p.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "a" {
+				linked += len([]rune(nodeText(c)))
+				continue
+			}
+			rec(c)
+		}
+	}
+	rec(n)
+	total := len([]rune(nodeText(n)))
+	return total > 0 && float64(linked) >= menuShare*float64(total)
 }
 
 func classify(n *html.Node) string {

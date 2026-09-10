@@ -113,6 +113,9 @@ func TestDisclaimer(t *testing.T) {
 		{"paid partnership", "Paid partnership with Acme Cloud.", true},
 		{"russian legal", "На правах рекламы. Компания предлагает тариф.", true},
 		{"russian partner material", "Партнёрский материал подготовлен вместе с Acme.", true},
+		{"russian legal marking with prose", "Реклама. 12+. ООО «Единое Видео». VK Видео: vkvideo.ru", true},
+		{"bare label", "Реклама", false},
+		{"bare label punctuated", "#ad.", false},
 		{"hashtag prefix of a longer tag", "Follow us at #adassay for updates.", false},
 		{"word prefix", "Рекламация была отклонена поставщиком.", false},
 		{"neutral prose", "The team compared three storage engines on the same hardware.", false},
@@ -123,6 +126,19 @@ func TestDisclaimer(t *testing.T) {
 				t.Errorf("%q fired = %v, want %v", c.text, got, c.want)
 			}
 		})
+	}
+}
+
+func TestDisclaimerSkipsMenus(t *testing.T) {
+	seg := core.Segment{
+		Text: "Редакция Реклама Контакты Вакансии",
+		Links: []core.Link{
+			{Href: "/info/", Text: "Редакция"}, {Href: "/sales", Text: "Реклама"},
+			{Href: "/contacts", Text: "Контакты"}, {Href: "/career", Text: "Вакансии"},
+		},
+	}
+	if fires(t, config.FeatureDisclaimer, seg, Doc{}) {
+		t.Error("a footer menu fired disclaimer")
 	}
 }
 
