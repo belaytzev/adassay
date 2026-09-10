@@ -57,9 +57,7 @@ l2:
       - партнерский материал
       - реклама
     affiliate_params:
-      - ref
-      - tag
-      - utm_campaign
+      - linkcode
       - aff_id
       - irclickid
       - clickid

@@ -138,18 +138,25 @@ func affiliate(links []core.Link, p config.Patterns) bool {
 				return true
 			}
 		}
-		params := map[string]bool{}
-		for k := range u.Query() {
-			params[strings.ToLower(k)] = true
+		params := map[string]string{}
+		for k, v := range u.Query() {
+			params[strings.ToLower(k)] = v[0]
 		}
 		for _, k := range p.AffiliateParams {
-			if params[strings.ToLower(k)] {
+			if _, ok := params[strings.ToLower(k)]; ok {
 				return true
 			}
+		}
+		if associateTag.MatchString(params["tag"]) {
+			return true
 		}
 	}
 	return false
 }
+
+// An Amazon Associates tracking ID ends in the marketplace suffix (-20, -21…);
+// a bare tag= is a WordPress listing filter.
+var associateTag = regexp.MustCompile(`^[A-Za-z0-9_-]+-\d{2}$`)
 
 // A segment that is nothing but the marker is a slot label or a menu entry;
 // the disclosure worth acting on sits in prose.
