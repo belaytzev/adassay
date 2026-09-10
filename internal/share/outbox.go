@@ -3,6 +3,7 @@ package share
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -23,6 +24,8 @@ const (
 	FlushMin = 20
 
 	maxBatch = 256
+
+	maxResponse = 1 << 16
 )
 
 type Spool interface {
@@ -77,18 +80,6 @@ func (o *Outbox) Record(res core.Result, adopted map[string]bool) int {
 			queued++
 		}
 	}
-	for _, f := range res.Hidden {
-		if o.enqueue(core.SubmitEntry{
-
-			Hash:    store.HexHash("hidden/" + f.Kind + "\n" + f.Sample),
-			Verdict: core.Drop,
-
-			Reasons: []string{"hidden_" + f.Kind},
-			Source:  o.sourceOf(core.Segment{}),
-		}) {
-			queued++
-		}
-	}
 	return queued
 }
 
@@ -134,8 +125,14 @@ func (o *Outbox) send(entries []core.SubmitEntry) bool {
 	if len(entries) > maxBatch {
 		entries = entries[:maxBatch]
 	}
-	if err := o.Client.Submit(entries); err != nil {
+	resp, err := o.Client.Submit(entries)
+	if err != nil {
 		o.log().Warn("outbox: submit failed", "entries", len(entries), "err", err)
+		return false
+	}
+	// ponytail: all-or-nothing on the counts, per-entry status in SubmitResponse if mixed batches need splitting
+	if resp.Accepted == 0 && resp.Rejected > 0 {
+		o.log().Warn("outbox: submit refused", "entries", len(entries), "rejected", resp.Rejected)
 		return false
 	}
 	hashes := make([]string, len(entries))
@@ -149,16 +146,18 @@ func (o *Outbox) send(entries []core.SubmitEntry) bool {
 	return true
 }
 
-func (c *Client) Submit(entries []core.SubmitEntry) error {
+func (c *Client) Submit(entries []core.SubmitEntry) (core.SubmitResponse, error) {
+	var resp core.SubmitResponse
 	id, err := c.identity()
 	if err != nil {
-		return fmt.Errorf("share: /v1/segments: %w", err)
+		return resp, fmt.Errorf("share: /v1/segments: %w", err)
 	}
-	return c.post("/v1/segments", id, core.SubmitRequest{
+	err = c.post("/v1/segments", id, core.SubmitRequest{
 		ClientID:    id.ClientID,
 		NormVersion: core.NormVersion,
 		Entries:     entries,
-	})
+	}, &resp)
+	return resp, err
 }
 
 func (c *Client) Vote(hash string, v core.Verdict) error {
@@ -171,10 +170,10 @@ func (c *Client) Vote(hash string, v core.Verdict) error {
 		NormVersion: core.NormVersion,
 		Hash:        hash,
 		Verdict:     v,
-	})
+	}, nil)
 }
 
-func (c *Client) post(path string, id Identity, body any) error {
+func (c *Client) post(path string, id Identity, body, out any) error {
 	if c == nil || c.BaseURL == "" {
 		return fmt.Errorf("share: no endpoint configured, set $%s", EnvEndpoint)
 	}
@@ -194,6 +193,12 @@ func (c *Client) post(path string, id Identity, body any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("share: %s: %s", path, resp.Status)
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponse)).Decode(out); err != nil {
+		return fmt.Errorf("share: %s: %w", path, err)
 	}
 	return nil
 }

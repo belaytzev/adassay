@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -15,9 +16,51 @@ CREATE TABLE IF NOT EXISTS confirmations (
 	verdict      TEXT    NOT NULL,
 	source_rank  INTEGER NOT NULL DEFAULT 0,
 	created      INTEGER NOT NULL,
+	refuted      INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (hash, norm_version, client_id)
 );
 `
+
+// Marks the confirmations selected by one column and charges each install
+// once: a row already marked is skipped, so flipping back and forth cannot
+// refute the same backing twice. The UPDATE locks the rows it marks, which
+// keeps two concurrent overturns from charging the same install on postgres.
+func refute(b binder, hash string, normVersion int, column, value string) error {
+	rows, err := b.Query(
+		`UPDATE confirmations SET refuted = 1
+		 WHERE hash = ? AND norm_version = ? AND refuted = 0 AND `+column+` = ?
+		 RETURNING client_id`,
+		hash, normVersion, value)
+	if err != nil {
+		return fmt.Errorf("server: refute: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("server: refute: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("server: refute: %w", err)
+	}
+	rows.Close()
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	if _, err := b.Exec(
+		`UPDATE installs SET refuted = refuted + 1 WHERE client_id IN (`+strings.Repeat("?,", len(ids)-1)+`?)`,
+		args...); err != nil {
+		return fmt.Errorf("server: refute: %w", err)
+	}
+	return nil
+}
 
 func confirm(ex execer, hash string, normVersion int, clientID, verdict, source string) error {
 	_, err := ex.Exec(

@@ -91,8 +91,8 @@ func TestRecordSpoolsToDiskWithoutSending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pending: %v", err)
 	}
-	if len(pending) != 3 {
-		t.Fatalf("want 2 dropped segments + 1 finding, got %d: %+v", len(pending), pending)
+	if len(pending) != 2 {
+		t.Fatalf("want 2 dropped segments and no hidden findings, got %d: %+v", len(pending), pending)
 	}
 	if oldest.IsZero() {
 		t.Error("oldest timestamp missing, a flush could never become due")

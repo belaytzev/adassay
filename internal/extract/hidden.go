@@ -107,7 +107,11 @@ func styleKind(st map[string]string) string {
 	case st["display"] == "none",
 		st["visibility"] == "hidden",
 		isZero(st["opacity"]),
-		isZeroLength(st["font-size"]):
+		isZeroLength(st["font-size"]),
+		clipped(st["clip"]),
+		inset(st["clip-path"]),
+		st["overflow"] == "hidden" && (isZeroLength(st["height"]) || isZeroLength(st["max-height"]) ||
+			isZeroLength(st["width"]) || isZeroLength(st["max-width"])):
 		return KindCSSHidden
 	}
 
@@ -116,10 +120,116 @@ func styleKind(st map[string]string) string {
 			return KindOffScreen
 		}
 	}
+	if transparent(st["color"]) || transparent(st["-webkit-text-fill-color"]) {
+		return KindColor
+	}
 	if c, bg := normColor(st["color"]), background(st); c != "" && c == bg {
 		return KindColor
 	}
 	return ""
+}
+
+func transparent(v string) bool {
+	if v == "transparent" {
+		return true
+	}
+	fn, args, ok := strings.Cut(strings.TrimSuffix(v, ")"), "(")
+	if !ok {
+		return false
+	}
+	legacy := false
+	switch fn {
+	case "rgb", "rgba", "hsl", "hsla":
+		legacy = true
+	case "hwb", "lab", "lch", "oklab", "oklch":
+	default:
+		return false
+	}
+	// Three channels, then alpha after a slash or as the fourth comma-separated
+	// legacy component. Anything else is invalid CSS and renders opaque.
+	// ponytail: absolute colours only, relative from-syntax needs a colour grammar
+	if channels, alpha, ok := strings.Cut(args, "/"); ok {
+		return numbers(strings.Fields(channels), 3, true) && zero(alpha, true)
+	}
+	if parts := strings.Split(args, ","); legacy && numbers(parts, 4, false) {
+		return zero(parts[3], false)
+	}
+	return false
+}
+
+// A channel is a number, a percentage or an angle; the space-separated
+// syntax also takes none, which the legacy comma grammar has no place for.
+func numbers(toks []string, n int, modern bool) bool {
+	if len(toks) != n {
+		return false
+	}
+	for _, t := range toks {
+		t = strings.TrimSpace(t)
+		if modern && t == "none" {
+			continue
+		}
+		for _, unit := range []string{"%", "deg", "grad", "rad", "turn"} {
+			t = strings.TrimSuffix(t, unit)
+		}
+		if _, err := strconv.ParseFloat(t, 64); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// A missing alpha renders as zero.
+func zero(tok string, modern bool) bool {
+	tok = strings.TrimSpace(tok)
+	if tok == "none" {
+		return modern
+	}
+	f, err := strconv.ParseFloat(strings.TrimSuffix(tok, "%"), 64)
+	return err == nil && f == 0
+}
+
+// rect(top, right, bottom, left) shows nothing once right <= left or bottom <= top.
+func clipped(v string) bool {
+	v, ok := strings.CutPrefix(v, "rect(")
+	if !ok {
+		return false
+	}
+	parts := strings.FieldsFunc(strings.TrimSuffix(v, ")"), func(r rune) bool { return r == ',' || r == ' ' })
+	if len(parts) != 4 {
+		return false
+	}
+	var side [4]float64
+	for i, p := range parts {
+		f, ok := length(p)
+		if !ok {
+			return false
+		}
+		side[i] = f
+	}
+	return side[1] <= side[3] || side[2] <= side[0]
+}
+
+// ponytail: inset() with percentages only, circle/polygon if a corpus page uses them
+func inset(v string) bool {
+	v, ok := strings.CutPrefix(v, "inset(")
+	if !ok {
+		return false
+	}
+	v, _, _ = strings.Cut(strings.TrimSuffix(v, ")"), " round")
+	parts := strings.Fields(v)
+	if len(parts) == 0 || len(parts) > 4 {
+		return false
+	}
+	order := [][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(parts)-1]
+	var side [4]float64
+	for i, j := range order {
+		f, ok := length(parts[j])
+		if !ok || (f != 0 && !strings.HasSuffix(parts[j], "%")) {
+			return false
+		}
+		side[i] = f
+	}
+	return side[0]+side[2] >= 100 || side[1]+side[3] >= 100
 }
 
 func background(st map[string]string) string {
@@ -172,7 +282,7 @@ func parseStyle(s string) map[string]string {
 		return nil
 	}
 	st := map[string]string{}
-	for _, decl := range strings.Split(s, ";") {
+	for _, decl := range declarations(s) {
 		prop, val, ok := strings.Cut(decl, ":")
 		if !ok {
 			continue
@@ -181,9 +291,203 @@ func parseStyle(s string) map[string]string {
 		if i := strings.IndexByte(val, '!'); i >= 0 {
 			val = val[:i]
 		}
-		st[strings.ToLower(strings.TrimSpace(prop))] = strings.ToLower(strings.Join(strings.Fields(val), " "))
+		st[strings.ToLower(normalize(prop))] = strings.ToLower(normalize(val))
 	}
 	return st
+}
+
+// Splits a style attribute the way the CSS tokenizer would: a comment is a
+// space, a string is opaque until its quote or a newline, an unquoted url()
+// token is opaque until its parenthesis, an escape binds what it escapes,
+// and only a ';' outside every block ends a declaration.
+func declarations(s string) []string {
+	var out []string
+	var b strings.Builder
+	var open []byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '"' || c == '\'':
+			end := opaque(s, i+1, c)
+			b.WriteString(s[i:end])
+			i = end - 1
+		case c == '/' && i+1 < len(s) && s[i+1] == '*':
+			end := strings.Index(s[i+2:], "*/")
+			if end < 0 {
+				i = len(s)
+			} else {
+				i += 2 + end + 1
+			}
+			b.WriteByte(' ')
+		case identStart(s, i):
+			name, end := ident(s, i)
+			if name == "url" && end < len(s) && s[end] == '(' && !quoted(s[end+1:]) {
+				end = opaque(s, end+1, ')')
+			}
+			b.WriteString(s[i:end])
+			i = end - 1
+		case c == '\\' && i+1 < len(s):
+			b.WriteString(s[i : i+2])
+			i++
+		case c == '(' || c == '[' || c == '{':
+			open = append(open, closer(c))
+			b.WriteByte(c)
+		case (c == ')' || c == ']' || c == '}') && len(open) > 0 && open[len(open)-1] == c:
+			open = open[:len(open)-1]
+			b.WriteByte(c)
+		case c == ';' && len(open) == 0:
+			out = append(out, b.String())
+			b.Reset()
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return append(out, b.String())
+}
+
+func closer(c byte) byte {
+	switch c {
+	case '(':
+		return ')'
+	case '[':
+		return ']'
+	}
+	return '}'
+}
+
+// Index one past the closing delimiter, honouring escapes. A newline ends a
+// string without being consumed; the end of the input closes anything.
+func opaque(s string, from int, close byte) int {
+	for i := from; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case close:
+			return i + 1
+		case '\n', '\r', '\f':
+			if close != ')' {
+				return i
+			}
+		}
+	}
+	return len(s)
+}
+
+func quoted(s string) bool {
+	s = strings.TrimLeft(s, " \t\n\r\f")
+	return s != "" && (s[0] == '"' || s[0] == '\'')
+}
+
+func identStart(s string, i int) bool {
+	c := s[i]
+	if i > 0 && identByte(s[i-1]) {
+		return false
+	}
+	if c == '-' {
+		return i+1 < len(s) && (s[i+1] == '-' || nameStart(s[i+1]))
+	}
+	return nameStart(c)
+}
+
+func nameStart(c byte) bool {
+	return c == '_' || c == '\\' || c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func identByte(c byte) bool {
+	return c == '-' || (c >= '0' && c <= '9') || nameStart(c)
+}
+
+// The identifier at i, lower-cased with its escapes decoded, and the index
+// past it.
+func ident(s string, i int) (string, int) {
+	end := i
+	for end < len(s) {
+		switch {
+		case s[end] == '\\' && end+1 < len(s):
+			_, end = escape(s, end)
+		case identByte(s[end]):
+			end++
+		default:
+			return strings.ToLower(normalize(s[i:end])), end
+		}
+	}
+	return strings.ToLower(normalize(s[i:end])), end
+}
+
+// The code point an escape at i denotes and the index past it: up to six
+// hex digits plus one optional whitespace, or any other single byte. A
+// newline cannot be escaped, so the backslash stands for itself there, and
+// CRLF counts as the one whitespace the browser folds it into.
+func escape(s string, i int) (rune, int) {
+	j := i + 1
+	for j < len(s) && j < i+7 && isHex(s[j]) {
+		j++
+	}
+	if j == i+1 {
+		if space(s[j]) {
+			return '\\', i + 1
+		}
+		return rune(s[j]), j + 1
+	}
+	code, _ := strconv.ParseUint(s[i+1:j], 16, 32)
+	if j < len(s) && space(s[j]) {
+		if s[j] == '\r' && j+1 < len(s) && s[j+1] == '\n' {
+			j++
+		}
+		j++
+	}
+	return rune(code), j
+}
+
+func space(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'
+}
+
+// Decodes escapes and collapses whitespace in one pass, because the two
+// cannot be ordered: an escape swallows the one whitespace that follows it,
+// while a decoded whitespace belongs to the token and is never collapsed or
+// trimmed. Runs of real whitespace become a single space, and leading and
+// trailing runs are dropped.
+func normalize(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	pending := false
+	for i := 0; i < len(s); {
+		switch c := s[i]; {
+		case space(c):
+			pending = b.Len() > 0
+			i++
+		case c == '\\' && i+1 < len(s):
+			r, next := escape(s, i)
+			if r == '\\' && next == i+1 {
+				// Not an escape: the backslash stands alone and the
+				// whitespace after it collapses like any other.
+				writeSpace(&b, &pending)
+				b.WriteByte('\\')
+				i = next
+				continue
+			}
+			writeSpace(&b, &pending)
+			b.WriteRune(r)
+			i = next
+		default:
+			writeSpace(&b, &pending)
+			b.WriteByte(c)
+			i++
+		}
+	}
+	return b.String()
+}
+
+func writeSpace(b *strings.Builder, pending *bool) {
+	if *pending {
+		b.WriteByte(' ')
+		*pending = false
+	}
+}
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 func isZero(v string) bool {
