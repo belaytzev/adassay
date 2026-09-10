@@ -82,9 +82,11 @@ func TestAffiliateLink(t *testing.T) {
 		want bool
 	}{
 		{"amazon tag", "https://www.amazon.com/dp/B01?tag=blog-20", true},
-		{"ref param", "https://shop.example/item?ref=habr", true},
-		{"utm_campaign", "https://shop.example/item?utm_source=x&utm_campaign=affiliate", true},
-		{"param case", "https://shop.example/item?Ref=habr", true},
+		{"amazon sitestripe", "https://www.amazon.com/dp/B01?linkCode=ogi&th=1", true},
+		{"param case", "https://shop.example/item?Aff_Id=7", true},
+		{"wordpress tag filter", "https://blog.example/?tag=golang", false},
+		{"ref is source tracking", "https://shop.example/item?ref=habr", false},
+		{"utm is analytics", "https://shop.example/item?utm_source=x&utm_campaign=affiliate", false},
 		{"skimlinks redirector", "https://go.skimresources.com/?id=1&url=x", true},
 		{"awin redirector", "https://www.awin1.com/cread.php?awinmid=1", true},
 		{"impact subdomain", "https://track.impact.com/c/1/2", true},
@@ -214,7 +216,7 @@ func TestCTAUrgency(t *testing.T) {
 func TestDetectOrderAndIndependence(t *testing.T) {
 	seg := core.Segment{
 		Text:  "На правах рекламы: используйте промокод SAVE20. Успей купить ShopMax, ShopMax только сегодня со скидкой.",
-		Links: []core.Link{{Href: "https://shop.example/x?ref=blog", Rel: "sponsored"}},
+		Links: []core.Link{{Href: "https://shop.example/x?tag=blog-20", Rel: "sponsored"}},
 	}
 	got := Detect(seg, Doc{}, patterns(t))
 	want := config.Features
