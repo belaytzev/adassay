@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -46,10 +47,17 @@ func refute(b binder, hash string, normVersion int, column, value string) error 
 		return fmt.Errorf("server: refute: %w", err)
 	}
 	rows.Close()
-	for _, id := range ids {
-		if _, err := b.Exec(`UPDATE installs SET refuted = refuted + 1 WHERE client_id = ?`, id); err != nil {
-			return fmt.Errorf("server: refute: %w", err)
-		}
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	if _, err := b.Exec(
+		`UPDATE installs SET refuted = refuted + 1 WHERE client_id IN (`+strings.Repeat("?,", len(ids)-1)+`?)`,
+		args...); err != nil {
+		return fmt.Errorf("server: refute: %w", err)
 	}
 	return nil
 }
