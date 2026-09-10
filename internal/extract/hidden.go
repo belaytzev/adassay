@@ -133,11 +133,16 @@ func transparent(v string) bool {
 	if v == "transparent" {
 		return true
 	}
-	open := strings.IndexByte(v, '(')
-	if open < 0 || !strings.HasSuffix(v, ")") {
+	fn, args, ok := strings.Cut(strings.TrimSuffix(v, ")"), "(")
+	if !ok {
 		return false
 	}
-	parts := strings.FieldsFunc(v[open+1:len(v)-1], func(r rune) bool { return r == ',' || r == '/' || r == ' ' })
+	switch fn {
+	case "rgb", "rgba", "hsl", "hsla":
+	default:
+		return false
+	}
+	parts := strings.FieldsFunc(args, func(r rune) bool { return r == ',' || r == '/' || r == ' ' })
 	return len(parts) == 4 && isZeroLength(parts[3])
 }
 
@@ -250,18 +255,38 @@ func parseStyle(s string) map[string]string {
 }
 
 // A comment separates tokens the way whitespace does, so it becomes a space.
+// Quoted strings are copied through: a delimiter inside one is not a comment.
 func stripComments(s string) string {
-	for {
-		i := strings.Index(s, "/*")
-		if i < 0 {
-			return s
-		}
-		j := strings.Index(s[i+2:], "*/")
-		if j < 0 {
-			return s[:i]
-		}
-		s = s[:i] + " " + s[i+2+j+2:]
+	if !strings.Contains(s, "/*") {
+		return s
 	}
+	var b strings.Builder
+	b.Grow(len(s))
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			if c == '\\' && i+1 < len(s) {
+				b.WriteByte(c)
+				i++
+				c = s[i]
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '/' && i+1 < len(s) && s[i+1] == '*':
+			end := strings.Index(s[i+2:], "*/")
+			if end < 0 {
+				return b.String()
+			}
+			i += 2 + end + 1
+			c = ' '
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 func isZero(v string) bool {

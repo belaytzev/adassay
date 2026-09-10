@@ -22,6 +22,12 @@ func TestStyleKindInvisibleSpellings(t *testing.T) {
 
 		{"color:rgb(0, 0, 0)", ""},
 		{"color:rgba(0, 0, 0, 0.5)", ""},
+		{"color:color(display-p3 1 0 0)", ""},
+		{"color:device-cmyk(1 0 0 0)", ""},
+		{`--a:"/*";display:none;--b:"*/"`, KindCSSHidden},
+		{`content:"/*";color:red`, ""},
+		{`content:'a\'/*';display:none`, KindCSSHidden},
+		{"display:none;/* unterminated", KindCSSHidden},
 		{"clip:rect(0, 100px, 100px, 0)", ""},
 		{"clip:auto", ""},
 		{"clip-path:inset(10% 20%)", ""},
