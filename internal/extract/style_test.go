@@ -20,8 +20,18 @@ func TestStyleKindInvisibleSpellings(t *testing.T) {
 		{"width:0;height:0;overflow:hidden", KindCSSHidden},
 		{"max-height:0;overflow:hidden", KindCSSHidden},
 
+		{"color:oklch(0 0 0/0)", KindColor},
+		{"color:lab(0 0 0 / 0%)", KindColor},
+		{"color:hwb(0 0% 0% / 0)", KindColor},
+		{"background:url(a/*);display:none;list-style:url(*/b)", KindCSSHidden},
+		{`background:url("a/*");display:none`, KindCSSHidden},
+		{"background:URL(a/*);display:none", KindCSSHidden},
+
 		{"color:rgb(0, 0, 0)", ""},
 		{"color:rgba(0, 0, 0, 0.5)", ""},
+		{"color:rgb(255 0 0 0)", ""},
+		{"color:oklch(0 0 0 / 1)", ""},
+		{"background:url(a/*);color:red", ""},
 		{"color:color(display-p3 1 0 0)", ""},
 		{"color:device-cmyk(1 0 0 0)", ""},
 		{`--a:"/*";display:none;--b:"*/"`, KindCSSHidden},

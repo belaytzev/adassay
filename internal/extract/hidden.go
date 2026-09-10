@@ -138,12 +138,19 @@ func transparent(v string) bool {
 		return false
 	}
 	switch fn {
-	case "rgb", "rgba", "hsl", "hsla":
+	case "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch":
 	default:
 		return false
 	}
-	parts := strings.FieldsFunc(args, func(r rune) bool { return r == ',' || r == '/' || r == ' ' })
-	return len(parts) == 4 && isZeroLength(parts[3])
+	// Alpha follows a slash, or is the fourth comma-separated legacy component;
+	// a fourth space-separated value is invalid CSS and renders opaque.
+	if _, alpha, ok := strings.Cut(args, "/"); ok {
+		return isZeroLength(alpha)
+	}
+	if parts := strings.Split(args, ","); len(parts) == 4 {
+		return isZeroLength(parts[3])
+	}
+	return false
 }
 
 // rect(top, right, bottom, left) shows nothing once right <= left or bottom <= top.
@@ -255,7 +262,8 @@ func parseStyle(s string) map[string]string {
 }
 
 // A comment separates tokens the way whitespace does, so it becomes a space.
-// Quoted strings are copied through: a delimiter inside one is not a comment.
+// Quoted strings and unquoted url() tokens are copied through: a delimiter
+// inside one is not a comment.
 func stripComments(s string) string {
 	if !strings.Contains(s, "/*") {
 		return s
@@ -276,6 +284,14 @@ func stripComments(s string) string {
 			}
 		case c == '"' || c == '\'':
 			quote = c
+		case len(s)-i > 4 && strings.EqualFold(s[i:i+4], "url(") && s[i+4] != '"' && s[i+4] != '\'':
+			end := strings.IndexByte(s[i:], ')')
+			if end < 0 {
+				end = len(s) - i
+			}
+			b.WriteString(s[i : i+end])
+			i += end - 1
+			continue
 		case c == '/' && i+1 < len(s) && s[i+1] == '*':
 			end := strings.Index(s[i+2:], "*/")
 			if end < 0 {
