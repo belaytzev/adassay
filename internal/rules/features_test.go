@@ -51,6 +51,29 @@ func TestRelSponsored(t *testing.T) {
 	}
 }
 
+func TestSponsoredProse(t *testing.T) {
+	review := "IPVanish offers 3,400-plus servers in 113 countries. In our experience its download speeds were uneven, " +
+		"with a 44% average speed loss in our testing, fast speeds marred by occasionally noticeable dips that could impact 4K streaming."
+	cases := []struct {
+		name, text, anchor string
+		want               string
+	}{
+		{"review with a linked product name", review, "IPVanish", config.FeatureAffiliate},
+		{"button", "View at Best Buy", "View at Best Buy", config.FeatureRelSponsored},
+		{"short pitch", "Get the Craftsman cordless hammer drill at Amazon, Lowe's, or Ace Hardware.", "Amazon", config.FeatureRelSponsored},
+		{"long text that is mostly the link", review, review, config.FeatureRelSponsored},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			seg := core.Segment{Text: c.text, Links: []core.Link{{Href: "https://shop.example/x", Rel: "sponsored", Text: c.anchor}}}
+			got := Detect(seg, Doc{}, patterns(t))
+			if len(got) != 1 || got[0] != c.want {
+				t.Errorf("fired %v, want only %s", got, c.want)
+			}
+		})
+	}
+}
+
 func TestPromoCode(t *testing.T) {
 	cases := []struct {
 		name string

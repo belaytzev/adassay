@@ -20,8 +20,9 @@ The output is markdown. Three things can appear in it:
 - A paragraph wrapped in `[[adassay:flag {"id":"s3","score":0.27,"reasons":["affiliate_link"]}]] … [[/adassay:flag]]`.
   It stayed because the filter was unsure. Read `reasons`, weigh it, and do not quote it as
   neutral fact without saying so.
-- Nothing, where a paragraph was cut: promo codes, `rel="sponsored"` links, paid-placement
-  disclosures. Do not go looking for what was removed.
+- Nothing, where a paragraph was cut: promo codes, sponsored buttons and price links,
+  paid-placement disclosures. Do not go looking for what was removed. A review paragraph that
+  only links the product it discusses is not cut — it arrives flagged with `affiliate_link`.
 
 The command exits after printing. Check the exit code before trusting the text:
 
