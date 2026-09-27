@@ -129,10 +129,11 @@ Point the agent at `fetch_clean` instead of a plain fetch tool. That is the whol
 
 Be clear about the boundary before you install it.
 
-- ✂️ **Reliably removes advertising the publisher declared.** Links tagged `rel="sponsored"`,
-  affiliate redirectors, promo codes next to promo wording, paid-placement disclosures. On a
-  labelled corpus of 52 pages and 6820 segments it removes 94% of that class and has never
-  removed an honest paragraph — the one number this project refuses to trade away.
+- ✂️ **Removes advertising the publisher declared.** Sponsored buttons and price links,
+  affiliate redirectors, promo codes next to promo wording, paid-placement disclosures. A
+  review paragraph that only links the product it discusses stays, flagged. Of 100 random cuts
+  on real search results, 89 were advertising, 6 page chrome, 2 short pitches and 3 short
+  factual lines that were themselves the link — a price, a spec. No review paragraph was cut.
 - 🕵️ **Detects text aimed at parsers rather than readers.** `display:none`, off-screen
   positioning, text painted the colour of its background, invisible unicode, prompts tucked
   into `alt` and `meta`. This is the part nothing else does, and it doubles as an indirect
@@ -232,7 +233,13 @@ agent.
 affiliate link, disclosure, brand density, CTA with scarcity. A weighted sum produces a score;
 above the upper threshold it is dropped, below the lower one kept, in between it is doubtful.
 
-Two of these deserve a note. Brand density only fires when another signal already fired —
+A `rel="sponsored"` link counts as `rel_sponsored` only when it *is* the paragraph — a button, a
+price, a "View at Best Buy", a pitch of a sentence or two. A review paragraph that merely names
+the product through such a link is still the review: it holds the speed test, the breach
+history, the advice to cancel before renewal. It gets `affiliate_link` instead and stays,
+flagged. Dropping those was deleting the very criticism an agent reads a review for.
+
+Two more deserve a note. Brand density only fires when another signal already fired —
 otherwise it flagged every article that repeats a technical term, and "Kubernetes" in a
 Kubernetes tutorial looked exactly like a product being pushed. And links are read from the
 **raw** DOM, because readability prunes blocks by link density, which is a fair description

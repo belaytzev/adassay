@@ -12,10 +12,11 @@ import (
 )
 
 func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
+	sponsored := core.Sponsored(seg.Links)
 	fired := map[string]bool{
-		config.FeatureRelSponsored: core.Sponsored(seg.Links),
+		config.FeatureRelSponsored: sponsored && !prose(seg),
 		config.FeaturePromoCode:    promoCode(seg.Text, p.PromoWords),
-		config.FeatureAffiliate:    affiliate(seg.Links, p),
+		config.FeatureAffiliate:    affiliate(seg.Links, p) || sponsored && prose(seg),
 		config.FeatureDisclaimer:   matchesAny(seg.Text, p.Disclaimers) && !label(seg.Text, p.Disclaimers) && !menu(seg),
 		config.FeatureCTAUrgency:   matchesAny(seg.Text, p.CTAWords) && matchesAny(seg.Text, p.UrgencyWords),
 	}
@@ -179,6 +180,25 @@ func menu(seg core.Segment) bool {
 	}
 	total := len([]rune(seg.Text))
 	return total > 0 && float64(linked) >= menuShare*float64(total)
+}
+
+// A review whose product name carries a sponsored link is still the review; only a segment that is the link gets dropped.
+const (
+	proseWords     = 25
+	sponsoredShare = 0.5
+)
+
+func prose(seg core.Segment) bool {
+	if len(strings.Fields(seg.Text)) <= proseWords {
+		return false
+	}
+	linked := 0
+	for _, l := range seg.Links {
+		if core.Sponsored([]core.Link{l}) {
+			linked += len([]rune(l.Text))
+		}
+	}
+	return float64(linked) < sponsoredShare*float64(len([]rune(seg.Text)))
 }
 
 func matchesAny(text string, patterns []string) bool {
