@@ -1,0 +1,30 @@
+== by category: read pages, pages with a drop, share of text dropped / flagged, unreadable
+ALL            357    13%     0.4%     2.8%        40%
+category      read w/drop    drop%    flag% unreadable
+control         61     0%     0.0%     0.1%        39%
+electronics     61    20%     0.9%     9.0%        39%
+finance         56    11%     0.2%     0.3%        44%
+home            62    21%     0.7%     5.3%        38%
+hosting         57    16%     0.3%     1.7%        39%
+software        60    12%     0.2%     0.9%        40%
+== exit codes
+0 257
+1 18
+2 65
+3 106
+4 147
+== dropped text by reason set
+ 70.9% rel_sponsored
+ 25.6% rel_sponsored,affiliate_link
+  3.5% disclaimer,brand_density
+== top domains by dropped text
+ 16.6% cnet.com
+ 14.3% everydayhomecomfort.com
+ 10.1% wired.com
+  8.8% bonappetit.com
+  6.4% techradar.com
+  4.9% digitalcameraworld.com
+  4.3% bobvila.com
+  4.3% androidcentral.com
+  3.5% coffeekev.com
+  3.3% cnbc.com
