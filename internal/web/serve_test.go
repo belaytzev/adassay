@@ -453,16 +453,33 @@ func TestConcurrentRequestsAreServed(t *testing.T) {
 	}
 }
 
-// withHash is the link a page must use for an asset. It is computed here, not
-// through versioned: a link that stops following the content is the bug.
-func withHash(t *testing.T, asset string) string {
+// withHash is the link to an asset: the hash of what the server answers there,
+// computed here rather than through hash, since a link that stops following
+// the served content is the bug.
+func withHash(t *testing.T, mux http.Handler, asset string) string {
 	t.Helper()
-	b, err := siteFS.ReadFile("site/" + asset)
-	if err != nil {
-		t.Fatalf("read %s: %v", asset, err)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/"+asset, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /%s = %d", asset, w.Code)
 	}
-	sum := sha256.Sum256(b)
+	sum := sha256.Sum256(w.Body.Bytes())
 	return asset + "?v=" + hex.EncodeToString(sum[:4])
+}
+
+// A font changes the stylesheet's own link, so a new font cannot sit behind an
+// old stylesheet either.
+func TestStylesheetLinksFontsByHash(t *testing.T) {
+	mux := testMux(t, func(string) ([]byte, error) { t.Error("fetched for a static asset"); return nil, nil })
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/adassay.css", nil))
+	css := w.Body.String()
+	for _, font := range []string{"fonts/source-serif-4-latin-cyrillic.woff2", "fonts/jetbrains-mono-latin-cyrillic.woff2"} {
+		if want := `url("` + withHash(t, mux, font) + `")`; !strings.Contains(css, want) {
+			t.Errorf("stylesheet does not contain %s", want)
+		}
+	}
 }
 
 // The page is public: it carries the go-import tag for the public repository
@@ -481,9 +498,10 @@ func TestIndexNamesOnlyThePublicRepository(t *testing.T) {
 	body := w.Body.String()
 	for _, want := range []string{
 		`<meta name="go-import" content="adassay.com git https://github.com/belaytzev/adassay">`,
-		`<link rel="stylesheet" href="/` + withHash(t, "adassay.css") + `">`,
-		`<script src="/` + withHash(t, "adassay.js") + `" defer>`,
-		`<img src="/` + withHash(t, "logo-dark.svg") + `"`,
+		`<link rel="stylesheet" href="/` + withHash(t, mux, "adassay.css") + `">`,
+		`<script src="/` + withHash(t, mux, "adassay.js") + `" defer>`,
+		`<img src="/` + withHash(t, mux, "logo-dark.svg") + `"`,
+		`<link rel="icon" href="/` + withHash(t, mux, "logo.png") + `"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index does not contain %q", want)
@@ -515,7 +533,7 @@ func TestReportPage(t *testing.T) {
 		t.Fatalf("GET /report = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `<link rel="stylesheet" href="/`+withHash(t, "adassay.css")+`">`) {
+	if !strings.Contains(body, `<link rel="stylesheet" href="/`+withHash(t, mux, "adassay.css")+`">`) {
 		t.Error("report does not load the site stylesheet under its content hash")
 	}
 	for _, leak := range []string{"t1go.net", "192.168.", "10.42."} {
