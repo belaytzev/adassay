@@ -1,7 +1,10 @@
 package web
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -20,7 +23,7 @@ import (
 	"adassay.com/internal/render"
 )
 
-//go:embed site/index.html site/report.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.png site/fonts
+//go:embed site/index.html site/report.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.svg site/fonts
 var siteFS embed.FS
 
 var siteRoot, _ = fs.Sub(siteFS, "site")
@@ -31,11 +34,37 @@ var assets = []string{
 	"adassay.css",
 	"adassay.js",
 	"logo.png",
-	"logo-dark.png",
+	"logo-dark.svg",
 	"fonts/source-serif-4-latin-cyrillic.woff2",
 	"fonts/jetbrains-mono-latin-cyrillic.woff2",
 	// OFL-1.1 asks that the licence travel with the fonts it covers.
 	"fonts/LICENSE",
+}
+
+// pages link their assets with a hash of the content: the CDN keeps
+// /adassay.css for hours, and a new page under an old stylesheet is broken.
+var pages = func() map[string][]byte {
+	out := map[string][]byte{}
+	for _, page := range []string{"index.html", "report.html"} {
+		b, _ := fs.ReadFile(siteRoot, page)
+		for _, asset := range []string{"adassay.css", "adassay.js", "logo-dark.svg"} {
+			b = bytes.ReplaceAll(b, []byte(`"/`+asset+`"`), []byte(`"/`+versioned(asset)+`"`))
+		}
+		out[page] = b
+	}
+	return out
+}()
+
+func versioned(asset string) string {
+	b, _ := fs.ReadFile(siteRoot, asset)
+	sum := sha256.Sum256(b)
+	return asset + "?v=" + hex.EncodeToString(sum[:4])
+}
+
+func servePage(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(pages[name]))
+	}
 }
 
 // maxRequestBody is generous for a JSON object holding one URL.
@@ -103,7 +132,7 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 func goGet(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("go-get") == "1" && (r.Method == "GET" || r.Method == "HEAD") {
-			http.ServeFileFS(w, r, siteRoot, "index.html")
+			servePage("index.html")(w, r)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -115,13 +144,11 @@ func newMux(a *Analyzer) http.Handler {
 	lim, c, cases := newLimiter(), newCache(), newCases(a)
 	sem := make(chan struct{}, maxInFlight)
 	static := http.FileServerFS(siteRoot)
-	mux.Handle("GET /{$}", static)
+	mux.HandleFunc("GET /{$}", servePage("index.html"))
 	for _, name := range assets {
 		mux.Handle("GET /"+name, static)
 	}
-	mux.HandleFunc("GET /report", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, siteRoot, "report.html")
-	})
+	mux.HandleFunc("GET /report", servePage("report.html"))
 	mux.HandleFunc("POST /api/analyze", func(w http.ResponseWriter, r *http.Request) {
 		handleAnalyze(w, r, a, lim, c, sem)
 	})

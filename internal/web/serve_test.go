@@ -1,6 +1,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -451,6 +453,18 @@ func TestConcurrentRequestsAreServed(t *testing.T) {
 	}
 }
 
+// withHash is the link a page must use for an asset. It is computed here, not
+// through versioned: a link that stops following the content is the bug.
+func withHash(t *testing.T, asset string) string {
+	t.Helper()
+	b, err := siteFS.ReadFile("site/" + asset)
+	if err != nil {
+		t.Fatalf("read %s: %v", asset, err)
+	}
+	sum := sha256.Sum256(b)
+	return asset + "?v=" + hex.EncodeToString(sum[:4])
+}
+
 // The page is public: it carries the go-import tag for the public repository
 // and must not name the private forge or a cluster address. A leak here is a
 // leak to every visitor.
@@ -467,7 +481,9 @@ func TestIndexNamesOnlyThePublicRepository(t *testing.T) {
 	body := w.Body.String()
 	for _, want := range []string{
 		`<meta name="go-import" content="adassay.com git https://github.com/belaytzev/adassay">`,
-		`<link rel="stylesheet" href="/adassay.css">`,
+		`<link rel="stylesheet" href="/` + withHash(t, "adassay.css") + `">`,
+		`<script src="/` + withHash(t, "adassay.js") + `" defer>`,
+		`<img src="/` + withHash(t, "logo-dark.svg") + `"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index does not contain %q", want)
@@ -499,8 +515,8 @@ func TestReportPage(t *testing.T) {
 		t.Fatalf("GET /report = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `<link rel="stylesheet" href="/adassay.css">`) {
-		t.Error("report does not load the site stylesheet")
+	if !strings.Contains(body, `<link rel="stylesheet" href="/`+withHash(t, "adassay.css")+`">`) {
+		t.Error("report does not load the site stylesheet under its content hash")
 	}
 	for _, leak := range []string{"t1go.net", "192.168.", "10.42."} {
 		if strings.Contains(body, leak) {
