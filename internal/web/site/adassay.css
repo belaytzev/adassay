@@ -13,7 +13,7 @@
   font-display: swap;
 }
 
-/* --band stays navy in both themes: the hero always shows logo-dark.png */
+/* --band stays navy in both themes: the hero always shows logo-dark.svg */
 :root {
   --paper:     #ffffff;
   --raised:    #f3f5f8;
