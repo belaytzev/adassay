@@ -3,7 +3,8 @@
 © 2014 - 2021 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name ‘Source’.
 https://github.com/adobe-fonts/source-serif
 
-A subset of Source Serif 4 (latin and cyrillic) converted to woff2. Dropping glyphs
+A subset of Source Serif 4 (latin and cyrillic, weights 400 to 600, optical size fixed at
+20) converted to woff2. Dropping glyphs
 costs functional equivalence, so this is a Modified Version and OFL §3 bars it from
 carrying the reserved name: the family is renamed to "Adassay Serif".
 
