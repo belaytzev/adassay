@@ -490,6 +490,25 @@ func TestIndexNamesOnlyThePublicRepository(t *testing.T) {
 	}
 }
 
+func TestReportPage(t *testing.T) {
+	mux := testMux(t, func(string) ([]byte, error) { t.Error("fetched for a static page"); return nil, nil })
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/report", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /report = %d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `<link rel="stylesheet" href="/adassay.css">`) {
+		t.Error("report does not load the site stylesheet")
+	}
+	for _, leak := range []string{"t1go.net", "192.168.", "10.42."} {
+		if strings.Contains(body, leak) {
+			t.Errorf("report contains %q", leak)
+		}
+	}
+}
+
 // The chips and the case the page opens on are slugs the backend has to know:
 // renaming one in cases.go leaves the demo opening on a 404.
 func TestFrontendOpensOnlyCasesTheBackendServes(t *testing.T) {

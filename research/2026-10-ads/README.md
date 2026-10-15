@@ -16,9 +16,9 @@ The data behind [adassay.com/report](https://adassay.com/report).
   a Finnish datacenter read the same share of pages, only Reddit answered it with 403 instead of
   an empty JavaScript shell.
 - **Counting.** Share of *characters*, not paragraphs: an eight-word promo line and a
-  two-hundred-word paragraph should not weigh the same. Only pages that were read count toward
-  the share; pages behind a bot wall (exit 3) or rendered by JavaScript (exit 4) are reported
-  separately.
+  two-hundred-word paragraph should not weigh the same. A page counts as read when it returned
+  any text (`segments > 0` in `pages.tsv`), whatever the exit code: 40 pages with exit 4 returned
+  part of their text and are counted. The 236 that returned none are reported separately.
 
 ## What the numbers are not
 

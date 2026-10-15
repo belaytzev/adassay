@@ -20,7 +20,7 @@ import (
 	"adassay.com/internal/render"
 )
 
-//go:embed site/index.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.png site/fonts
+//go:embed site/index.html site/report.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.png site/fonts
 var siteFS embed.FS
 
 var siteRoot, _ = fs.Sub(siteFS, "site")
@@ -119,6 +119,9 @@ func newMux(a *Analyzer) http.Handler {
 	for _, name := range assets {
 		mux.Handle("GET /"+name, static)
 	}
+	mux.HandleFunc("GET /report", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, siteRoot, "report.html")
+	})
 	mux.HandleFunc("POST /api/analyze", func(w http.ResponseWriter, r *http.Request) {
 		handleAnalyze(w, r, a, lim, c, sem)
 	})

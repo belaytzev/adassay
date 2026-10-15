@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="22% of the product pages an agent reads from Google carry advertising the publisher declared. 593 pages, 60 queries, data and scripts to rerun it.">
+<title>What your agent reads — adassay</title>
+<link rel="icon" href="/logo.png" type="image/png">
+<link rel="stylesheet" href="/adassay.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <a class="brand" href="/">adassay</a>
+    <nav class="links" aria-label="Documentation">
+      <a href="/report" aria-current="page">Report</a>
+      <a href="https://github.com/belaytzev/adassay#-quick-start">Quick start</a>
+      <a href="https://github.com/belaytzev/adassay#-how-it-decides">How it decides</a>
+      <a href="https://github.com/belaytzev/adassay/tree/main/research/2026-10-ads">Data</a>
+      <a href="https://github.com/belaytzev/adassay">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <picture class="logo">
+      <source srcset="/logo-dark.png" media="(prefers-color-scheme: dark)">
+      <img src="/logo.png" alt="" width="192" height="192">
+    </picture>
+
+    <div class="hero__copy">
+      <h1>22% of the product pages an agent reads carry declared advertising.</h1>
+      <p>We asked Google 50 questions people put to an agent before buying something, read the
+         top ten results the way an agent does, and counted what each publisher itself marked as
+         commercial: sponsored links, affiliate links, promo codes, paid-placement notices. Ten
+         control questions with no product in them turned up none. Advertising that carries no
+         marker is not counted, so every number here is a floor.</p>
+    </div>
+  </section>
+
+  <div class="strip">
+    <div class="tally">
+      <span>593 <b>pages</b></span>
+      <span>357 <b>returned text</b></span>
+      <span class="n-cut">64 of 296 <b>product pages marked</b></span>
+      <span>0 of 61 <b>control pages</b></span>
+    </div>
+  </div>
+
+  <section class="sheet report">
+    <h2 class="doctitle">Pages with declared advertising, by what was asked</h2>
+    <p class="lede">Share of the pages that returned text. A page counts if it held at least one
+       segment that was cut or queried for a commercial link.</p>
+
+    <table class="bars">
+      <tr><th>electronics</th><td><span class="bar"><span style="width: 36%"></span></span></td><td>36%</td><td>22 of 61</td></tr>
+      <tr><th>home</th><td><span class="bar"><span style="width: 26%"></span></span></td><td>26%</td><td>16 of 62</td></tr>
+      <tr><th>hosting, VPN</th><td><span class="bar"><span style="width: 19%"></span></span></td><td>19%</td><td>11 of 57</td></tr>
+      <tr><th>software</th><td><span class="bar"><span style="width: 13%"></span></span></td><td>13%</td><td>8 of 60</td></tr>
+      <tr><th>finance</th><td><span class="bar"><span style="width: 12%"></span></span></td><td>12%</td><td>7 of 56</td></tr>
+      <tr class="control"><th>control</th><td><span class="bar"><span style="width: 0%"></span></span></td><td>0%</td><td>0 of 61</td></tr>
+    </table>
+
+    <h3>Cut and queried are different things</h3>
+    <p class="prose">A segment is cut when it is the advertisement: a price button, a "View at
+       Best Buy", a promo code. A review paragraph that links the product it discusses is
+       queried instead. It stays in the text with a marker, because it still holds the review.
+       Nearly all the cut text, 96.5% of it, carries <code>rel="sponsored"</code>; the rest is
+       paid-placement notices. Nearly all the queried text carries an affiliate link.</p>
+
+    <table class="figures">
+      <tr><th></th><th>text cut</th><th>text queried</th></tr>
+      <tr><th>electronics</th><td>0.9%</td><td>9.0%</td></tr>
+      <tr><th>home</th><td>0.7%</td><td>5.3%</td></tr>
+      <tr><th>hosting, VPN</th><td>0.3%</td><td>1.7%</td></tr>
+      <tr><th>software</th><td>0.2%</td><td>0.9%</td></tr>
+      <tr><th>finance</th><td>0.2%</td><td>0.3%</td></tr>
+      <tr class="control"><th>control</th><td>0.0%</td><td>0.1%</td></tr>
+    </table>
+    <p class="note">Shares of characters, not paragraphs: an eight-word button and a
+       two-hundred-word review should not weigh the same.</p>
+
+    <h3>One page from the sample</h3>
+    <p class="prose">CNET, <a href="https://www.cnet.com/tech/services-and-software/best-vpn-for-travel/">Best
+       VPN for Travel</a>, fifth result for "best vpn for streaming". The buy buttons go. The
+       IPVanish review stays, queried, with its 44% speed loss intact. The next paragraph passes
+       untouched.</p>
+
+    <article class="seg seg--cut">
+      <p class="seg__text">$3 at Nord VPN</p>
+      <aside class="mark"><span class="mark__verdict">cut</span><span class="mark__reasons">rel_sponsored</span></aside>
+    </article>
+    <article class="seg seg--cut">
+      <p class="seg__text">$2 at Surfshark</p>
+      <aside class="mark"><span class="mark__verdict">cut</span><span class="mark__reasons">rel_sponsored</span></aside>
+    </article>
+    <article class="seg seg--query">
+      <p class="seg__text">IPVanish offers 3,400-plus servers in 113 countries, which is in the
+         same ballpark as NordVPN, Proton VPN, ExpressVPN and Surfshark. In our experience,
+         IPVanish’s internet download speeds were uneven, with a 44% average internet download
+         speed loss in our 2024 testing, with fast speeds marred by occasionally noticeable dips,
+         which could impact gaming or 4K streaming.</p>
+      <aside class="mark"><span class="mark__verdict">query</span><span class="mark__reasons">affiliate_link</span></aside>
+    </article>
+    <article class="seg">
+      <p class="seg__text">IPVanish works fine for casual use, but you can get a VPN with more
+         robust privacy features and faster internet speeds, all of which benefit travel.
+         IPVanish’s user-friendly apps make it a decent choice for beginners seeking a VPN to add
+         peace of mind and allow for streaming abroad. But wallet-friendly VPNs PIA and Surfshark
+         are better options for the money because of their larger server networks.</p>
+    </article>
+
+    <h3>40% of the results never reached the agent</h3>
+    <p class="prose">236 of the 593 pages returned no text at all to a reader without a browser.</p>
+    <table class="figures">
+      <tr><th>built by JavaScript and empty without it, most of Reddit and YouTube</th><td>107</td></tr>
+      <tr><th>behind a bot wall, The New York Times, PCMag and Forbes among them</th><td>106</td></tr>
+      <tr><th>refused another way, eight of them with 402 Payment Required from Investopedia, Allrecipes, Serious Eats and Health</th><td>18</td></tr>
+      <tr><th>held nothing but hidden text</th><td>5</td></tr>
+    </table>
+    <p class="note">A second pass from a datacenter address read the same share of pages.
+       Reddit answered it with 403 instead of an empty shell, and that was the only difference.</p>
+
+    <h3>What the first pass got wrong</h3>
+    <p class="prose">Version 0.2.1 cut a whole paragraph for one sponsored link anywhere in it. A
+       hand check of 100 random cuts found 16 review paragraphs among them: a LastPass breach
+       history, an IPVanish speed-test loss, advice to cancel a VPN before it renews. They made
+       up 70% of the text cut. Version 0.2.2 cuts only a segment that is the link and queries
+       the prose around one. The same check on the new run found 3 short lines that were
+       themselves the link (a price, a spec, a plan description) and no review paragraph.</p>
+    <table class="figures">
+      <tr><th></th><th>0.2.1</th><th>0.2.2</th></tr>
+      <tr><th>text cut</th><td>2.5%</td><td>0.4%</td></tr>
+      <tr><th>text queried</th><td>0.7%</td><td>2.8%</td></tr>
+      <tr><th>cuts that should have stayed, of 100</th><td>16</td><td>3</td></tr>
+      <tr><th>their share of the text cut</th><td>70%</td><td>11%</td></tr>
+    </table>
+    <p class="note">The hand check is in
+       <a href="https://github.com/belaytzev/adassay/blob/main/research/2026-10-ads/drop_review.tsv">drop_review.tsv</a>,
+       one label per segment.</p>
+
+    <h3>How it was measured</h3>
+    <p class="prose">60 queries, ten in each of five buying categories and ten control. The top
+       ten Google results for each, through SearXNG, deduplicated: 593 pages, frozen in
+       <code>urls.txt</code> so a rerun reads the same ones. Each page was read on 28 September
+       2026 from a residential address in Spain with adassay 0.2.2, rules only: no model judge,
+       no shared database, an empty local database per page. The queries, the URLs, per-segment
+       verdicts without text and the scripts are in
+       <a href="https://github.com/belaytzev/adassay/tree/main/research/2026-10-ads">research/2026-10-ads</a>.</p>
+
+    <p class="cta">
+      <a class="btn" href="/">Read a page yourself</a>
+      <a class="chip" href="https://github.com/belaytzev/adassay#-quick-start">Give it to your agent</a>
+    </p>
+  </section>
+
+  <footer class="colophon">
+    <p>Native advertising, a paragraph that sells with no link, price or disclosure, is not
+       counted: the rules catch none of it. One search engine on one day, in English; an agent
+       on a different search API reads different pages. 65 pages also carried text hidden from
+       human readers, which this report does not analyse.</p>
+  </footer>
+
+</div>
+
+</body>
+</html>
