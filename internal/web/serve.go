@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -41,29 +42,39 @@ var assets = []string{
 	"fonts/LICENSE",
 }
 
-// pages link their assets with a hash of the content: the CDN keeps
-// /adassay.css for hours, and a new page under an old stylesheet is broken.
-var pages = func() map[string][]byte {
-	out := map[string][]byte{}
-	for _, page := range []string{"index.html", "report.html"} {
-		b, _ := fs.ReadFile(siteRoot, page)
-		for _, asset := range []string{"adassay.css", "adassay.js", "logo-dark.svg"} {
-			b = bytes.ReplaceAll(b, []byte(`"/`+asset+`"`), []byte(`"/`+versioned(asset)+`"`))
-		}
-		out[page] = b
-	}
-	return out
-}()
+// rendered holds the files whose links carry a hash of what they link to: the
+// CDN keeps static files for hours, and a new page under an old stylesheet is
+// broken. The stylesheet is rendered first, so its own hash covers its fonts.
+var rendered = map[string][]byte{}
 
-func versioned(asset string) string {
-	b, _ := fs.ReadFile(siteRoot, asset)
-	sum := sha256.Sum256(b)
-	return asset + "?v=" + hex.EncodeToString(sum[:4])
+func init() {
+	stamp("adassay.css", "fonts/source-serif-4-latin-cyrillic.woff2", "fonts/jetbrains-mono-latin-cyrillic.woff2")
+	for _, page := range []string{"index.html", "report.html"} {
+		stamp(page, "/adassay.css", "/adassay.js", "/logo-dark.svg", "/logo.png")
+	}
 }
 
-func servePage(name string) http.HandlerFunc {
+func stamp(name string, links ...string) {
+	b, _ := fs.ReadFile(siteRoot, name)
+	for _, link := range links {
+		v := link + "?v=" + hash(strings.TrimPrefix(link, "/"))
+		b = bytes.ReplaceAll(b, []byte(`"`+link+`"`), []byte(`"`+v+`"`))
+	}
+	rendered[name] = b
+}
+
+func hash(name string) string {
+	b, ok := rendered[name]
+	if !ok {
+		b, _ = fs.ReadFile(siteRoot, name)
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:4])
+}
+
+func serveRendered(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(pages[name]))
+		http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(rendered[name]))
 	}
 }
 
@@ -132,7 +143,7 @@ func write(w http.ResponseWriter, res core.Result, code string) {
 func goGet(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("go-get") == "1" && (r.Method == "GET" || r.Method == "HEAD") {
-			servePage("index.html")(w, r)
+			serveRendered("index.html")(w, r)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -144,11 +155,15 @@ func newMux(a *Analyzer) http.Handler {
 	lim, c, cases := newLimiter(), newCache(), newCases(a)
 	sem := make(chan struct{}, maxInFlight)
 	static := http.FileServerFS(siteRoot)
-	mux.HandleFunc("GET /{$}", servePage("index.html"))
+	mux.HandleFunc("GET /{$}", serveRendered("index.html"))
 	for _, name := range assets {
+		if _, ok := rendered[name]; ok {
+			mux.HandleFunc("GET /"+name, serveRendered(name))
+			continue
+		}
 		mux.Handle("GET /"+name, static)
 	}
-	mux.HandleFunc("GET /report", servePage("report.html"))
+	mux.HandleFunc("GET /report", serveRendered("report.html"))
 	mux.HandleFunc("POST /api/analyze", func(w http.ResponseWriter, r *http.Request) {
 		handleAnalyze(w, r, a, lim, c, sem)
 	})
