@@ -213,6 +213,25 @@ a:focus-visible { outline: 2px solid var(--lavender); outline-offset: 2px; }
 .note { margin: 2rem 0 0; font-size: 0.78rem; color: var(--overlay); max-width: 40rem; }
 .note:empty { display: none; }
 
+/* ── report ───────────────────────────────────────────── */
+
+.links a[aria-current="page"] { color: var(--text); }
+.report h3 { margin: 3rem 0 1rem; font: 500 0.95rem/1.4 var(--mach); }
+.report .lede, .report .prose { max-width: 44rem; }
+.report .lede { margin: -1.25rem 0 1.5rem; font-size: 0.85rem; color: var(--subtext); }
+.report .prose { margin: 0 0 1.5rem; font: 400 1.0625rem/1.7 var(--read); }
+.report .prose code { font: 400 0.85em var(--mach); }
+.report table { width: 100%; max-width: 44rem; border-collapse: collapse; font-size: 0.85rem; }
+.report th, .report td { padding: 0.45rem 0.75rem 0.45rem 0; border-bottom: 1px solid var(--rule); text-align: left; font-weight: 400; }
+.report td { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.report th + th { text-align: right; color: var(--overlay); }
+.report tr.control > * { border-top: 1px solid var(--text); color: var(--overlay); }
+.bars td:nth-child(2) { width: 50%; text-align: left; }
+.bar { display: block; height: 0.6rem; background: var(--surface); border-radius: 2px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--red); }
+.cta { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 3rem 0 0; }
+.cta a { text-decoration: none; }
+
 /* ── colophon ─────────────────────────────────────────── */
 
 .colophon {
