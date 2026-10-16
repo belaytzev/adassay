@@ -502,6 +502,7 @@ func TestIndexNamesOnlyThePublicRepository(t *testing.T) {
 		`<script src="/` + withHash(t, mux, "adassay.js") + `" defer>`,
 		`<img src="/` + withHash(t, mux, "logo-dark.svg") + `"`,
 		`<link rel="icon" href="/` + withHash(t, mux, "logo.png") + `"`,
+		`<meta property="og:image" content="https://adassay.com/` + withHash(t, mux, "og.png") + `">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index does not contain %q", want)
@@ -535,6 +536,9 @@ func TestReportPage(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, `<link rel="stylesheet" href="/`+withHash(t, mux, "adassay.css")+`">`) {
 		t.Error("report does not load the site stylesheet under its content hash")
+	}
+	if !strings.Contains(body, `<meta property="og:image" content="https://adassay.com/`+withHash(t, mux, "og-report.png")+`">`) {
+		t.Error("report does not show its own card under its content hash")
 	}
 	for _, leak := range []string{"t1go.net", "192.168.", "10.42."} {
 		if strings.Contains(body, leak) {
