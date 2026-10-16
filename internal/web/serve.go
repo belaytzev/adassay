@@ -24,7 +24,7 @@ import (
 	"adassay.com/internal/render"
 )
 
-//go:embed site/index.html site/report.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.svg site/fonts
+//go:embed site/index.html site/report.html site/adassay.css site/adassay.js site/logo.png site/logo-dark.svg site/og.png site/og-report.png site/fonts
 var siteFS embed.FS
 
 var siteRoot, _ = fs.Sub(siteFS, "site")
@@ -36,6 +36,8 @@ var assets = []string{
 	"adassay.js",
 	"logo.png",
 	"logo-dark.svg",
+	"og.png",
+	"og-report.png",
 	"fonts/source-serif-4-latin-cyrillic.woff2",
 	"fonts/jetbrains-mono-latin-cyrillic.woff2",
 	// OFL-1.1 asks that the licence travel with the fonts it covers.
@@ -50,15 +52,16 @@ var rendered = map[string][]byte{}
 func init() {
 	stamp("adassay.css", "fonts/source-serif-4-latin-cyrillic.woff2", "fonts/jetbrains-mono-latin-cyrillic.woff2")
 	for _, page := range []string{"index.html", "report.html"} {
-		stamp(page, "/adassay.css", "/adassay.js", "/logo-dark.svg", "/logo.png")
+		stamp(page, "/adassay.css", "/adassay.js", "/logo-dark.svg", "/logo.png", "/og.png", "/og-report.png")
 	}
 }
 
+// stamp matches a link by its end only: og:image has to be an absolute URL.
 func stamp(name string, links ...string) {
 	b, _ := fs.ReadFile(siteRoot, name)
 	for _, link := range links {
 		v := link + "?v=" + hash(strings.TrimPrefix(link, "/"))
-		b = bytes.ReplaceAll(b, []byte(`"`+link+`"`), []byte(`"`+v+`"`))
+		b = bytes.ReplaceAll(b, []byte(link+`"`), []byte(v+`"`))
 	}
 	rendered[name] = b
 }
