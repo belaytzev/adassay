@@ -83,10 +83,15 @@ type L3 struct {
 }
 
 type Judge struct {
+	API       string        `yaml:"api"`
 	Endpoint  string        `yaml:"endpoint"`
 	Model     string        `yaml:"model"`
 	Timeout   time.Duration `yaml:"timeout"`
 	BatchSize int           `yaml:"batch_size"`
+
+	// systemone answers with a probability, not a verdict.
+	DropAt float64 `yaml:"drop_at"`
+	KeepAt float64 `yaml:"keep_at"`
 
 	// Never from the file: rules.yaml is embedded in the binary and shipped,
 	// and a gateway key does not belong in either.
@@ -94,6 +99,12 @@ type Judge struct {
 }
 
 const (
+	APIOpenAI    = "openai"
+	APISystemOne = "systemone"
+)
+
+const (
+	EnvJudgeAPI   = "ADASSAY_JUDGE_API"
 	EnvJudgeURL   = "ADASSAY_JUDGE_URL"
 	EnvJudgeModel = "ADASSAY_JUDGE_MODEL"
 	EnvJudgeKey   = "ADASSAY_JUDGE_KEY"
@@ -116,6 +127,9 @@ func Load(path string) (*Config, error) {
 	}
 	// After the file, so a host can point the judge at a gateway without
 	// carrying its own copy of the rules.
+	if v := os.Getenv(EnvJudgeAPI); v != "" {
+		cfg.Judge.API = v
+	}
 	if v := os.Getenv(EnvJudgeURL); v != "" {
 		cfg.Judge.Endpoint = v
 	}
@@ -207,6 +221,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: l3.max_shift must be within 0..1")
 	}
 
+	if c.Judge.API != APIOpenAI && c.Judge.API != APISystemOne {
+		return fmt.Errorf("config: judge.api %q is neither %q nor %q", c.Judge.API, APIOpenAI, APISystemOne)
+	}
 	if c.Judge.Endpoint == "" {
 		return fmt.Errorf("config: judge.endpoint is empty")
 	}
@@ -218,6 +235,10 @@ func (c *Config) Validate() error {
 	}
 	if c.Judge.BatchSize <= 0 {
 		return fmt.Errorf("config: judge.batch_size must be positive")
+	}
+	if c.Judge.KeepAt < 0 || c.Judge.DropAt > 1 || c.Judge.KeepAt >= c.Judge.DropAt {
+		return fmt.Errorf("config: judge.keep_at (%v) must be below judge.drop_at (%v), both within 0..1",
+			c.Judge.KeepAt, c.Judge.DropAt)
 	}
 	return nil
 }

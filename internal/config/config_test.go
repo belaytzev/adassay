@@ -95,6 +95,9 @@ func TestValidate(t *testing.T) {
 		{"no judge model", func(c *Config) { c.Judge.Model = "" }, "judge.model"},
 		{"no judge timeout", func(c *Config) { c.Judge.Timeout = 0 }, "judge.timeout"},
 		{"no judge batch", func(c *Config) { c.Judge.BatchSize = 0 }, "judge.batch_size"},
+		{"unknown judge api", func(c *Config) { c.Judge.API = "grpc" }, "judge.api"},
+		{"keep_at above drop_at", func(c *Config) { c.Judge.KeepAt = 0.9; c.Judge.DropAt = 0.5 }, "judge.keep_at"},
+		{"drop_at out of range", func(c *Config) { c.Judge.DropAt = 1.5 }, "judge.keep_at"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -154,6 +157,12 @@ func TestJudgeSettingsComeFromTheEnvironment(t *testing.T) {
 		t.Error("the embedded rules must not carry a key")
 	}
 
+	if base.Judge.API != APIOpenAI {
+		t.Errorf("api = %q, want %q by default: systemone needs a key nobody has out of the box",
+			base.Judge.API, APIOpenAI)
+	}
+
+	t.Setenv(EnvJudgeAPI, APISystemOne)
 	t.Setenv(EnvJudgeURL, "http://litellm.litellm:4000")
 	t.Setenv(EnvJudgeModel, "gpt-5.6-luna")
 	t.Setenv(EnvJudgeKey, "sk-adassay")
@@ -165,6 +174,9 @@ func TestJudgeSettingsComeFromTheEnvironment(t *testing.T) {
 	if cfg.Judge.Endpoint != "http://litellm.litellm:4000" || cfg.Judge.Model != "gpt-5.6-luna" {
 		t.Errorf("endpoint/model = %q/%q, want the environment to override the embedded defaults",
 			cfg.Judge.Endpoint, cfg.Judge.Model)
+	}
+	if cfg.Judge.API != APISystemOne {
+		t.Errorf("api = %q, want the environment to override it", cfg.Judge.API)
 	}
 	if cfg.Judge.APIKey != "sk-adassay" {
 		t.Errorf("api key = %q: it can only come from the environment, since rules.yaml ships inside "+
