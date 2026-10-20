@@ -263,6 +263,22 @@ judge:
 
 Without a model running, doubtful paragraphs simply stay flagged. Nothing else changes.
 
+**Or Jev, hosted.** `api: systemone` sends the grey zone to [TypeSafe's Jev](https://docs.typesafe.ai),
+a classifier that answers yes/no questions with a probability instead of generating text. One
+request covers a page's whole grey zone, about 0.3 s, and nothing has to run locally. A paragraph
+at or above `drop_at` is cut, at or below `keep_at` is kept, anything between stays flagged:
+
+```sh
+ADASSAY_JUDGE_API=systemone ADASSAY_JUDGE_URL=https://api.typesafe.ai \
+ADASSAY_JUDGE_MODEL=jev-1.14.0 ADASSAY_JUDGE_KEY=... adassay <url>
+```
+
+The defaults, `drop_at: 0.8` and `keep_at: 0.25`, come from 136 grey-zone paragraphs off 43
+English product pages: 24 of 27 ads cut, none of 106 editorial paragraphs, and the grey zone of
+those pages shrank from 430 paragraphs to about 45. Two runs agreed on 427. The labels were set
+by Claude, not a person, and Claude also wrote the question, so treat the numbers as a first check.
+`drop_at` is set high on purpose: a judge's drop is shared like any other confident verdict.
+
 ---
 
 ## 🔒 Privacy
@@ -286,11 +302,15 @@ they are an open question, and sending one would give away the page while adding
 Sending happens in batches off disk — not sooner than six hours, not fewer than twenty
 records — so the stream is not a broadcast of your reading session.
 
-**The judge.** L3 arbitration goes to any OpenAI-compatible endpoint. `ADASSAY_JUDGE_URL` and
-`ADASSAY_JUDGE_MODEL` override the built-in defaults, and `ADASSAY_JUDGE_KEY` supplies a bearer
-token for gateways that want one — it is never read from `rules.yaml`, which is embedded in the
-binary. A judge that cannot be reached is a warning, not a failure: the grey zone is left as the
-rules decided it.
+**The judge.** L3 arbitration goes to any OpenAI-compatible endpoint, or to Jev with
+`ADASSAY_JUDGE_API=systemone`. `ADASSAY_JUDGE_URL` and `ADASSAY_JUDGE_MODEL` override the
+built-in defaults, and `ADASSAY_JUDGE_KEY` supplies a bearer token for gateways that want one —
+it is never read from `rules.yaml`, which is embedded in the binary. A judge that cannot be
+reached is a warning, not a failure: the grey zone is left as the rules decided it.
+
+A local model keeps the text on the machine; a gateway or Jev does not. With Jev, the page title
+and the text of its doubtful paragraphs go to TypeSafe in the US under their terms. Only the
+grey zone is sent, never the whole page.
 
 **Credentials.** An install keeps its id and secret in the user config directory. Headless
 hosts can supply them through `ADASSAY_INSTALL` and `ADASSAY_SECRET` instead, which takes

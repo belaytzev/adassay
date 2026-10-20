@@ -88,6 +88,9 @@ type answer struct {
 func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdict {
 	out := make(map[string]core.Verdict, len(segs))
 	size := j.Cfg.BatchSize
+	if j.Cfg.API == config.APISystemOne {
+		size = systemOneBatch
+	}
 	if size <= 0 {
 		size = 1
 	}
@@ -118,20 +121,35 @@ func (j *Judge) Decide(topic string, segs []core.Segment) map[string]core.Verdic
 }
 
 func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict, error) {
-	body, err := json.Marshal(request{
+	if j.Cfg.API == config.APISystemOne {
+		return j.askSystemOne(topic, segs)
+	}
+	var outer response
+	err := j.post("/v1/chat/completions", request{
 		Model:          j.Cfg.Model,
 		Messages:       []message{{Role: "user", Content: Build(topic, segs)}},
 		Stream:         false,
 		Temperature:    0,
 		ResponseFormat: verdictSchema(),
-	})
+	}, &outer)
 	if err != nil {
 		return nil, err
 	}
-	url := strings.TrimSuffix(j.Cfg.Endpoint, "/") + "/v1/chat/completions"
+	if len(outer.Choices) == 0 {
+		return nil, fmt.Errorf("judge: %s: no choices in response", j.Cfg.Endpoint)
+	}
+	return Parse(outer.Choices[0].Message.Content)
+}
+
+func (j *Judge) post(path string, payload, out any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	url := strings.TrimSuffix(j.Cfg.Endpoint, "/") + path
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	// A local runtime needs no key; a gateway refuses the request without one.
@@ -140,20 +158,16 @@ func (j *Judge) ask(topic string, segs []core.Segment) (map[string]core.Verdict,
 	}
 	resp, err := j.client().Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("judge: %s: %s", url, resp.Status)
+		return fmt.Errorf("judge: %s: %s", url, resp.Status)
 	}
-	var outer response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&outer); err != nil {
-		return nil, fmt.Errorf("judge: decode envelope: %w", err)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(out); err != nil {
+		return fmt.Errorf("judge: decode envelope: %w", err)
 	}
-	if len(outer.Choices) == 0 {
-		return nil, fmt.Errorf("judge: %s: no choices in response", url)
-	}
-	return Parse(outer.Choices[0].Message.Content)
+	return nil
 }
 
 func Parse(payload string) (map[string]core.Verdict, error) {

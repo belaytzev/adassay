@@ -99,7 +99,10 @@ l3:
   max_shift: 0.2
 
 judge:
+  api: openai
   endpoint: http://127.0.0.1:1234
   model: qwen/qwen3.5-9b
   timeout: 60s
   batch_size: 8
+  drop_at: 0.8
+  keep_at: 0.25
