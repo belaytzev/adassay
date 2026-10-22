@@ -5,7 +5,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/adassay-web ./cmd/adassay-web
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /out/adassay-web /adassay-web
 EXPOSE 8080
 ENTRYPOINT ["/adassay-web"]
