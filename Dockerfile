@@ -7,7 +7,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/adassay-server ./c
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/adassay ./cmd/adassay
 RUN mkdir -p /out/data
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /out/adassay-server /adassay-server
 COPY --from=build /out/adassay /adassay
 COPY --from=build --chown=nonroot:nonroot /out/data /data
