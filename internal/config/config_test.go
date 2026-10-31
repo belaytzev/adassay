@@ -149,6 +149,9 @@ func TestEmptyOverrideFileKeepsDefaults(t *testing.T) {
 }
 
 func TestJudgeSettingsComeFromTheEnvironment(t *testing.T) {
+	for _, k := range []string{EnvJudgeAPI, EnvJudgeURL, EnvJudgeModel, EnvJudgeKey} {
+		t.Setenv(k, "")
+	}
 	base, err := Load("")
 	if err != nil {
 		t.Fatalf("load: %v", err)

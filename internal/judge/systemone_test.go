@@ -112,11 +112,12 @@ func TestSystemOneRefusalLeavesGreyZone(t *testing.T) {
 
 // Off by default, like the gateway test: it costs money and needs the network.
 //
-//	ADASSAY_JUDGE_KEY=... go test ./internal/judge -run SystemOneLive -v
+//	ADASSAY_JUDGE_API=systemone ADASSAY_JUDGE_KEY=... go test ./internal/judge -run SystemOneLive -v
 func TestSystemOneLive(t *testing.T) {
 	key := os.Getenv(config.EnvJudgeKey)
-	if key == "" {
-		t.Skipf("set %s to a TypeSafe key to run this", config.EnvJudgeKey)
+	// The API guard keeps a gateway key set for the gateway test from going to TypeSafe.
+	if key == "" || os.Getenv(config.EnvJudgeAPI) != config.APISystemOne {
+		t.Skipf("set %s=%s and %s to a TypeSafe key to run this", config.EnvJudgeAPI, config.APISystemOne, config.EnvJudgeKey)
 	}
 	j := New(config.Judge{
 		API: config.APISystemOne, Endpoint: "https://api.typesafe.ai", Model: "jev-1.14.0",

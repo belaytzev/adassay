@@ -23,6 +23,9 @@ func TestGatewayAnswersTheRealPrompt(t *testing.T) {
 	if url == "" || model == "" || key == "" {
 		t.Skipf("set %s, %s and %s to run this", config.EnvJudgeURL, config.EnvJudgeModel, config.EnvJudgeKey)
 	}
+	if api := os.Getenv(config.EnvJudgeAPI); api != "" && api != config.APIOpenAI {
+		t.Skipf("%s=%s points the variables at another API; SystemOneLive covers it", config.EnvJudgeAPI, api)
+	}
 
 	j := New(config.Judge{Endpoint: url, Model: model, Timeout: 120 * time.Second, BatchSize: 8, APIKey: key})
 	j.Log = slog.New(slog.NewTextHandler(os.Stderr, nil))

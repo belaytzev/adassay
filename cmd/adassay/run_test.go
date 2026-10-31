@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"adassay.com/internal/config"
 	"adassay.com/internal/core"
 	"adassay.com/internal/fetch"
 	"adassay.com/internal/share"
@@ -185,5 +186,9 @@ func TestMain(m *testing.M) {
 	os.Setenv(share.EnvEndpoint, "")
 	os.Setenv(share.EnvOptOut, "1")
 	os.Setenv(store.EnvDB, "")
+	// The environment outranks offline.yaml, and a developer shell may point the judge at a live API.
+	for _, k := range []string{config.EnvJudgeAPI, config.EnvJudgeURL, config.EnvJudgeModel, config.EnvJudgeKey} {
+		os.Unsetenv(k)
+	}
 	os.Exit(m.Run())
 }
