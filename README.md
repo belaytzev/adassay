@@ -382,12 +382,14 @@ name as well, or the detector fires on MediaWiki markup and plain meta descripti
 | `hi` | above this score a paragraph is dropped |
 | `lo` | below it, kept; between them, doubtful |
 | `bias` | intercept of the logistic sum; lower is more cautious |
-| `weights` | per-feature weight, non-negative, all six required |
+| `weights` | per-feature weight, non-negative, all seven required |
 | `shortcuts` | feature combinations that decide without the sum |
 | `patterns` | the word lists features match against |
 
 Features are fixed in code: `rel_sponsored`, `promo_code`, `affiliate_link`, `disclaimer`,
-`brand_density`, `cta_urgency`. A missing weight fails to load rather than counting as zero.
+`brand_density`, `cta_urgency`, `shop_button`. A missing weight fails to load rather than counting
+as zero. `shop_button` weighs nothing on its own: an affiliate link whose text is only retailer
+names, call-to-action words and prices (`View Deal`, `$129 at Amazon`) is dropped by a shortcut.
 
 ```yaml
 l2:

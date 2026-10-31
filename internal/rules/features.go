@@ -3,6 +3,7 @@ package rules
 import (
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -21,6 +22,7 @@ func Detect(seg core.Segment, doc Doc, p config.Patterns) []string {
 		config.FeatureCTAUrgency:   matchesAny(seg.Text, p.CTAWords) && matchesAny(seg.Text, p.UrgencyWords),
 	}
 	fired[config.FeatureBrandDensity] = corroborated(fired) && brandDensity(seg.Text, doc)
+	fired[config.FeatureShopButton] = fired[config.FeatureAffiliate] && menu(seg) && shopLabel(seg.Text, p.ShopLabels)
 	var out []string
 	for _, f := range config.Features {
 		if fired[f] {
@@ -180,6 +182,36 @@ func menu(seg core.Segment) bool {
 	}
 	total := len([]rune(seg.Text))
 	return total > 0 && float64(linked) >= menuShare*float64(total)
+}
+
+var (
+	parenthetical = regexp.MustCompile(`\([^)]*\)`)
+	price         = regexp.MustCompile(`[$€£₽]\s?\d[\d.,]*`)
+	shopFiller    = map[string]bool{"at": true, "on": true, "from": true, "в": true, "на": true}
+)
+
+// A shop button is nothing but retailer names, call-to-action words and prices.
+// A product name left over means a linked heading, which the reader needs.
+func shopLabel(text string, labels []string) bool {
+	s := price.ReplaceAllString(parenthetical.ReplaceAllString(text, " "), " ")
+	// Longest first, so "keh camera" goes before "keh" leaves "camera" behind.
+	sorted := slices.Clone(labels)
+	slices.SortFunc(sorted, func(a, b string) int { return len(b) - len(a) })
+	matched := false
+	for _, l := range sorted {
+		for i := 0; i+len(l) <= len(s); i++ {
+			if strings.EqualFold(s[i:i+len(l)], l) && bounded(s, i, len(l)) {
+				s = s[:i] + " " + s[i+len(l):]
+				matched = true
+			}
+		}
+	}
+	for _, w := range strings.FieldsFunc(s, func(r rune) bool { return !isWord(r) }) {
+		if !shopFiller[strings.ToLower(w)] {
+			return false
+		}
+	}
+	return matched
 }
 
 // A review whose product name carries a sponsored link is still the review; only a segment that is the link gets dropped.

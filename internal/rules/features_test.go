@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -236,13 +237,52 @@ func TestCTAUrgency(t *testing.T) {
 	}
 }
 
+func TestShopButton(t *testing.T) {
+	const aff = "https://www.amazon.com/dp/B01?tag=blog-20"
+	one := func(text string) []core.Link { return []core.Link{{Href: aff, Text: text}} }
+	cases := []struct {
+		name  string
+		text  string
+		links []core.Link
+		want  bool
+	}{
+		{"view deal", "View Deal", one("View Deal"), true},
+		{"price at retailer", "$129.99 at Amazon", one("$129.99 at Amazon"), true},
+		{"retailer with qualifier", "KEH Camera (used)", one("KEH Camera (used)"), true},
+		{"several storefronts", "Amazon (US) Amazon (CA) Amazon (UK)",
+			[]core.Link{{Href: aff, Text: "Amazon (US)"}, {Href: aff, Text: "Amazon (CA)"}, {Href: aff, Text: "Amazon (UK)"}}, true},
+		{"russian", "Купить на Ozon", one("Купить на Ozon"), true},
+		{"linked product heading", "Herman Miller Sayl", one("Herman Miller Sayl"), false},
+		{"product named after a retailer", "Amazon Echo Dot", one("Amazon Echo Dot"), false},
+		{"plain shop link", "View Deal", []core.Link{{Href: "https://shop.example/item", Text: "View Deal"}}, false},
+		{"label inside prose", "We bought it twice and the second one lasted longer. View Deal", one("View Deal"), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			seg := core.Segment{Text: c.text, Links: c.links}
+			if got := fires(t, config.FeatureShopButton, seg, Doc{}); got != c.want {
+				t.Errorf("%q fired = %v, want %v", c.text, got, c.want)
+			}
+		})
+	}
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if got := Apply(core.Segment{Text: "View Deal", Links: one("View Deal")}, Doc{}, cfg.L2); got.Verdict != core.Drop {
+		t.Errorf("affiliate View Deal = %v, want drop: it is the grey-zone case the judge was spending calls on", got.Verdict)
+	}
+}
+
 func TestDetectOrderAndIndependence(t *testing.T) {
 	seg := core.Segment{
 		Text:  "На правах рекламы: используйте промокод SAVE20. Успей купить ShopMax, ShopMax только сегодня со скидкой.",
 		Links: []core.Link{{Href: "https://shop.example/x?tag=blog-20", Rel: "sponsored"}},
 	}
 	got := Detect(seg, Doc{}, patterns(t))
-	want := config.Features
+	// A shop button cannot also be a sentence carrying a disclaimer and a promo code.
+	want := slices.DeleteFunc(slices.Clone(config.Features), func(f string) bool { return f == config.FeatureShopButton })
 	if len(got) != len(want) {
 		t.Fatalf("Detect = %v, want all of %v", got, want)
 	}

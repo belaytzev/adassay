@@ -33,10 +33,13 @@ l2:
     disclaimer: 2.5
     brand_density: 0.5
     cta_urgency: 0.8
+    shop_button: 0.0
   shortcuts:
     - features: [rel_sponsored, promo_code]
       verdict: drop
     - features: [disclaimer, affiliate_link]
+      verdict: drop
+    - features: [affiliate_link, shop_button]
       verdict: drop
   patterns:
     promo_words:
@@ -91,6 +94,42 @@ l2:
       - ограниченное предложение
       - успей
       - последний шанс
+    shop_labels:
+      - view deal
+      - view deals
+      - see deal
+      - get deal
+      - check price
+      - check prices
+      - see price
+      - view price
+      - check availability
+      - view product
+      - buy now
+      - shop now
+      - buy
+      - shop
+      - amazon
+      - walmart
+      - best buy
+      - target
+      - ebay
+      - newegg
+      - b&h
+      - b&h photo
+      - adorama
+      - keh
+      - keh camera
+      - home depot
+      - lowe's
+      - wayfair
+      - costco
+      - купить
+      - смотреть цену
+      - в магазин
+      - ozon
+      - wildberries
+      - яндекс маркет
 
 l3:
   min_visits: 5
