@@ -1,2 +1,3 @@
 raw/
 run.log
+judge_probe/*/*.req

@@ -43,3 +43,43 @@ The data behind [adassay.com/report](https://adassay.com/report).
 `drop_review.tsv` is the precision check: 100 dropped segments drawn at random (`srand(42)`),
 each labelled by hand as `ad`, `chrome` (page furniture), `pitch`, or `fact` — a line that
 should not have been cut.
+
+## Judge probe
+
+The rules leave a grey zone: segments they `flag` but are not sure enough to cut. A model judge
+decides those. `judge_probe.tsv` is the evidence for its thresholds (`judge.drop_at`,
+`judge.keep_at`): every flagged segment of this dataset — 488 segments on 46 pages — put to two
+judges on 2026-10-31.
+
+- **Jev** (`jev-1.14.0`, the `systemone` judge in `internal/judge`) answers each segment with
+  `p`, the probability that it exists to sell rather than to inform. `p1` and `p2` are two
+  identical requests per page from `judge_probe/probe.sh`, which replicates the judge's request,
+  capped at 40 segments per page: the 40 segments beyond the cap have no `p`. `jev` is the
+  verdict of the judge code itself at `drop_at` 0.8 and `keep_at` 0.25, run separately.
+- **luna** (`gpt-5.6-luna-adassay`, the earlier OpenAI-compatible judge) answers `drop` or `keep`.
+
+`label` is the ground truth, set by a person reading the segment in `raw/`, never by a model: the
+judges are what is being measured. `ad` — the segment exists to sell; `info` — it informs, even
+when enthusiastic or carrying a shop link. A segment the labeller cannot decide stays empty.
+
+```sh
+./judge_probe.sh > judge_probe.tsv     # rebuild from raw/ and judge_probe/; overwrites the labels
+judge_probe/probe.sh raw judge_probe/run3   # a fresh Jev pass; needs ADASSAY_JUDGE_{URL,KEY,MODEL}
+```
+
+Thresholds from the labels: for every candidate `t`, the share of `ad` among segments with mean
+`p` ≥ `t` and of `info` among those with `p` ≤ `t`. `drop_at` is the lowest `t` whose drop
+precision holds the target, `keep_at` the highest `t` whose keep precision does.
+
+```sh
+duckdb -c "
+WITH l AS (SELECT (p1 + p2) / 2 AS p, label FROM read_csv('judge_probe.tsv', delim = '\t', header = true)
+           WHERE label <> '' AND p1 IS NOT NULL),
+t AS (SELECT DISTINCT p AS t FROM l)
+SELECT t,
+  count(*) FILTER (WHERE p >= t) AS drop_n,
+  round(avg((label = 'ad')::int) FILTER (WHERE p >= t), 2) AS drop_precision,
+  count(*) FILTER (WHERE p <= t) AS keep_n,
+  round(avg((label = 'info')::int) FILTER (WHERE p <= t), 2) AS keep_precision
+FROM l, t GROUP BY t ORDER BY t"
+```
