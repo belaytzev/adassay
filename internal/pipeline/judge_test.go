@@ -111,3 +111,21 @@ func TestJudgeIsNotAskedWithoutGreyZone(t *testing.T) {
 		t.Errorf("judge called %d times with nothing to judge", j.calls)
 	}
 }
+
+func TestSharedJudgeVerdictOnFlagIsNotDivergence(t *testing.T) {
+	shared := &fakeShared{}
+	shared.put(greyText, core.BucketEntry{Verdict: core.Drop, Source: core.SourceOllama, Reasons: []string{judge.Reason}})
+	shared.put(adText, core.BucketEntry{Verdict: core.Keep, Source: core.SourceOllama, Reasons: []string{judge.Reason}})
+	p := &Pipeline{Cfg: testConfig(t), Cache: newCache(), Shared: shared, Log: quiet()}
+
+	res := run(t, p,
+		core.Segment{ID: "s1", Text: greyText},
+		core.Segment{ID: "s2", Text: adText, Links: adLinks})
+
+	if got := res.Segments[0].Verdict; got != core.Drop {
+		t.Errorf("verdict = %v, want the shared judge drop", got)
+	}
+	if p.Diverged != 1 {
+		t.Errorf("Diverged = %d, want 1: only s2, where the rules said drop, not flag", p.Diverged)
+	}
+}
