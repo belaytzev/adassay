@@ -11,7 +11,7 @@ const corpusDir = "../../testdata/corpus"
 const (
 	minRecall   = 0.55
 	minCoverage = 1.00
-	maxNoise    = 83
+	maxNoise    = 13
 )
 
 const maxHiddenFalsePositives = 3
