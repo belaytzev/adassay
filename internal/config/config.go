@@ -25,11 +25,12 @@ const (
 	FeatureDisclaimer   = "disclaimer"
 	FeatureBrandDensity = "brand_density"
 	FeatureCTAUrgency   = "cta_urgency"
+	FeatureShopButton   = "shop_button"
 )
 
 var Features = []string{
 	FeatureRelSponsored, FeaturePromoCode, FeatureAffiliate, FeatureDisclaimer,
-	FeatureBrandDensity, FeatureCTAUrgency,
+	FeatureBrandDensity, FeatureCTAUrgency, FeatureShopButton,
 }
 
 type Config struct {
@@ -72,6 +73,7 @@ type Patterns struct {
 	AffiliateHosts  []string `yaml:"affiliate_hosts"`
 	CTAWords        []string `yaml:"cta_words"`
 	UrgencyWords    []string `yaml:"urgency_words"`
+	ShopLabels      []string `yaml:"shop_labels"`
 }
 
 type L3 struct {
@@ -204,6 +206,7 @@ func (c *Config) Validate() error {
 		"l2.patterns.affiliate_hosts":  c.L2.Patterns.AffiliateHosts,
 		"l2.patterns.cta_words":        c.L2.Patterns.CTAWords,
 		"l2.patterns.urgency_words":    c.L2.Patterns.UrgencyWords,
+		"l2.patterns.shop_labels":      c.L2.Patterns.ShopLabels,
 	}); err != nil {
 		return err
 	}
