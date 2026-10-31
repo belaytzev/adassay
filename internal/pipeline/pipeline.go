@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"log/slog"
+	"slices"
 
 	"adassay.com/internal/config"
 	"adassay.com/internal/core"
@@ -115,8 +116,10 @@ func (p *Pipeline) segment(seg core.Segment, doc rules.Doc, sourceScore float64)
 	}
 
 	if entry, ok := p.lookupShared(hash); ok {
-
-		if local := p.shift(rules.Apply(seg, doc, p.Cfg.L2), sourceScore); local.Verdict != entry.Verdict {
+		local := p.shift(rules.Apply(seg, doc, p.Cfg.L2), sourceScore)
+		// A flag is the rules handing the segment to the judge, so a judged verdict is its answer, not a dispute.
+		judged := local.Verdict == core.Flag && slices.Contains(entry.Reasons, judge.Reason)
+		if local.Verdict != entry.Verdict && !judged {
 			p.Diverged++
 			p.log().Warn("verdict diverges from shared database",
 				"id", seg.ID,
